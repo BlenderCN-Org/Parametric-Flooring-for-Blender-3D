@@ -25,17 +25,17 @@
 # Author: Stephen Leger (s-leger)
 # ----------------------------------------------------------
 bl_info = {
-    'name': 'ParametricObject',
-    'description': 'ParametricObject objects skeleton',
-    'author': 's-leger',
+    'name': 'Floor',
+    'description': 'Floor parametric object',
+    'author': 's-leger, Jacob Morris',
     'license': 'GPL',
     'version': (1, 0, 0),
     'blender': (2, 7, 8),
     'location': 'View3D > Tools > Sample',
     'warning': '',
-    'wiki_url': 'https://github.com/s-leger/BlenderParametricObject/wiki',
-    'tracker_url': 'https://github.com/s-leger/BlenderParametricObject/issues',
-    'link': 'https://github.com/s-leger/BlenderParametricObject',
+    'wiki_url': 'https://github.com/BlendingJake/BlenderFlooringParametricObject/wiki',
+    'tracker_url': 'https://github.com/BlendingJake/BlenderFlooringParametricObject/issues',
+    'link': 'https://github.com/BlendingJake/BlenderFlooringParametricObject',
     'support': 'COMMUNITY',
     'category': '3D View'
     }
@@ -58,7 +58,7 @@ def update(self, context):
     self.update(context)
 
 
-class ParametricObjectProperty(Manipulable, PropertyGroup):
+class archipack_floor(Manipulable, PropertyGroup):
 
     x = FloatProperty(
             name='width',
@@ -137,7 +137,7 @@ class ParametricObjectProperty(Manipulable, PropertyGroup):
 
         old = context.active_object
 
-        o, props = OBJECT_PT_parametric_object.params(old)
+        o, props = ARCHIPACK_PT_floor.params(old)
         if props != self:
             return
 
@@ -160,35 +160,35 @@ class ParametricObjectProperty(Manipulable, PropertyGroup):
 # ------------------------------------------------------------------
 
 
-class OBJECT_PT_parametric_object(Panel):
-    bl_idname = "OBJECT_PT_parametric_object"
-    bl_label = "Parametric"
+class ARCHIPACK_PT_floor(Panel):
+    bl_idname = "ARCHIPACK_PT_floor"
+    bl_label = "Floor"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = 'Sample'
+    bl_category = 'Floor'
 
     def draw(self, context):
         layout = self.layout
         o = context.object
-        o, props = OBJECT_PT_parametric_object.params(o)
+        o, props = ARCHIPACK_PT_floor.params(o)
         if props is None:
             return
         layout.prop(props, 'x')
         layout.prop(props, 'y')
         layout.prop(props, 'z')
-        layout.operator("object.parametric_object_manipulate")
+        layout.operator("archipack.floor_manipulate")
 
     @classmethod
     def params(cls, o):
         if cls.filter(o):
-            if 'ParametricObjectProperty' in o.data:
-                return o, o.data.ParametricObjectProperty[0]
+            if 'archipack_floor' in o.data:
+                return o, o.data.archipack_floor[0]
         return o, None
 
     @classmethod
     def filter(cls, o):
         try:
-            return o.data is not None and bool('ParametricObjectProperty' in o.data)
+            return o.data is not None and bool('archipack_floor' in o.data)
         except:
             return False
 
@@ -204,10 +204,10 @@ class OBJECT_PT_parametric_object(Panel):
 # ------------------------------------------------------------------
 
 
-class OBJECT_OT_parametric_object(Operator):
-    bl_idname = "object.parametric_object"
-    bl_label = "Parametric"
-    bl_description = "Create simple parametric object"
+class ARCHIPACK_OT_floor(Operator):
+    bl_idname = "archipack.floor"
+    bl_label = "Floor"
+    bl_description = "Floor"
     bl_category = 'Sample'
     bl_options = {'REGISTER', 'UNDO'}
 
@@ -235,11 +235,11 @@ class OBJECT_OT_parametric_object(Operator):
             expose only basic params in operator
             use object property for other params
         """
-        m = bpy.data.meshes.new("Parametric Object")
-        o = bpy.data.objects.new("Parametric Object", m)
+        m = bpy.data.meshes.new("Floor")
+        o = bpy.data.objects.new("Floor", m)
 
         # attach parametric datablock
-        d = m.ParametricObjectProperty.add()
+        d = m.archipack_floor.add()
 
         # update params
         d.x = self.x
@@ -271,7 +271,7 @@ class OBJECT_OT_parametric_object(Operator):
             # activate manipulators at creation time
             o.select = True
             context.scene.objects.active = o
-            bpy.ops.object.parametric_object_manipulate()
+            bpy.ops.archipack.floor_manipulate()
             return {'FINISHED'}
         else:
             self.report({'WARNING'}, "Option only valid in Object mode")
@@ -282,15 +282,15 @@ class OBJECT_OT_parametric_object(Operator):
 # ------------------------------------------------------------------
 
 
-class OBJECT_OT_parametric_object_manipulate(Operator):
-    bl_idname = "object.parametric_object_manipulate"
+class ARCHIPACK_OT_floor_manipulate(Operator):
+    bl_idname = "archipack.floor_manipulate"
     bl_label = "Manipulate"
     bl_description = "Manipulate"
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
     def poll(self, context):
-        return OBJECT_PT_parametric_object.filter(context.active_object)
+        return ARCHIPACK_PT_floor.filter(context.active_object)
 
     def modal(self, context, event):
         return self.d.manipulable_modal(context, event)
@@ -298,7 +298,7 @@ class OBJECT_OT_parametric_object_manipulate(Operator):
     def invoke(self, context, event):
         if context.space_data.type == 'VIEW_3D':
             o = context.active_object
-            self.d = o.data.ParametricObjectProperty[0]
+            self.d = o.data.archipack_floor[0]
             self.d.manipulable_invoke(context)
             context.window_manager.modal_handler_add(self)
             return {'RUNNING_MODAL'}
@@ -328,25 +328,25 @@ class TOOLS_PT_parametric_object(Panel):
         box = row.box()
         box.label("Objects")
         row = box.row(align=True)
-        row.operator("object.parametric_object")
+        row.operator("archipack.floor")
 
 
 def register():
-    bpy.utils.register_class(ParametricObjectProperty)
-    Mesh.ParametricObjectProperty = CollectionProperty(type=ParametricObjectProperty)
-    bpy.utils.register_class(OBJECT_OT_parametric_object_manipulate)
-    bpy.utils.register_class(OBJECT_PT_parametric_object)
-    bpy.utils.register_class(OBJECT_OT_parametric_object)
+    bpy.utils.register_class(archipack_floor)
+    bpy.utils.register_class(ARCHIPACK_OT_floor_manipulate)
+    bpy.utils.register_class(ARCHIPACK_OT_floor)
+    bpy.utils.register_class(ARCHIPACK_PT_floor)
     bpy.utils.register_class(TOOLS_PT_parametric_object)
+    Mesh.archipack_floor = CollectionProperty(type=archipack_floor)
 
 
 def unregister():
+    bpy.utils.unregister_class(archipack_floor)
+    bpy.utils.unregister_class(ARCHIPACK_OT_floor_manipulate)
+    bpy.utils.unregister_class(ARCHIPACK_OT_floor)
+    bpy.utils.unregister_class(ARCHIPACK_PT_floor)
     bpy.utils.unregister_class(TOOLS_PT_parametric_object)
-    bpy.utils.unregister_class(OBJECT_OT_parametric_object_manipulate)
-    bpy.utils.unregister_class(OBJECT_OT_parametric_object)
-    bpy.utils.unregister_class(OBJECT_PT_parametric_object)
-    bpy.utils.unregister_class(ParametricObjectProperty)
-    del Mesh.ParametricObjectProperty
+    del Mesh.archipack_floor
 
 
 if __name__ == "__main__":

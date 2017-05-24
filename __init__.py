@@ -67,8 +67,9 @@ def update(self, context):
 
 class archipack_floor(Manipulable, PropertyGroup):
 
-    # keep track of vertices and faces
+    # keep track of data
     vs, fs = [], []  # vertices and faces
+    ms = []  # mat ids
 
     # floor type
     floor_material = EnumProperty(
@@ -100,6 +101,13 @@ class archipack_floor(Manipulable, PropertyGroup):
         default=8*FOOT, precision=2,
         description='Length', update=update,
         unit="LENGTH"
+    )
+
+    # generic spacing
+    spacing = FloatProperty(
+        name='spacing', unit='LENGTH', min=0, soft_max=1 * INCH,
+        default=0.125 * INCH, precision=2, update=update,
+        description='The amount of space between boards or tiles in both directions'
     )
 
     # board thickness
@@ -171,16 +179,156 @@ class archipack_floor(Manipulable, PropertyGroup):
         name='boards in group', min=1, soft_max=10, default=4,
         update=update, description='Number of boards in a group'
     )
-    spacing = FloatProperty(
-        name='spacing', unit='LENGTH', min=0, soft_max=1*INCH,
-        default=0.125*INCH, precision=2, update=update,
-        description='The amount of space between boards in both directions'
+
+    # tile specific
+    tile_width = FloatProperty(
+        name='tile width', min=2*INCH, soft_max=2*FOOT, default=1*FOOT,
+        update=update, precision=2, description='Width of the tiles', unit='LENGTH',
+    )
+    tile_length = FloatProperty(
+        name='tile length', min=2*INCH, soft_max=2*FOOT, default=8*INCH,
+        update=update, precision=2, description='Length of the tiles', unit='LENGTH',
+    )
+    mortar_depth = FloatProperty(
+        name='mortar depth', min=0, soft_max=1*INCH, default=0.25*INCH,
+        update=update, precision=2, unit='LENGTH',
+        description='The depth of the mortar from the surface of the tile'
+    )
+
+    # regular tile
+    offset_tiles = BoolProperty(
+        name='offset tiles', update=update, default=False,
+        description='Offset the tiles?'
+    )
+    random_offset = BoolProperty(
+        name='random offset', update=update, default=False,
+        description='Random amount of offset for each row of tiles'
+    )
+    offset = FloatProperty(
+        name='offset', update=update, min=0.001, max=100, default=50,
+        precision=2, description='How much to offset each row of tiles'
+    )
+    offset_variance = FloatProperty(
+        name='offset variance', update=update, min=0.001, max=100, default=50,
+        precision=2, description='How much to vary the offset each row of tiles'
     )
 
     @staticmethod
     def append_all(v_list, add):
         for i in add:
             v_list.append(i)
+
+    def add_cube(self, x, y, z, w, l, t, mat_id=0):
+        """
+        Adds vertices, faces, and material ids for a cube, makes it easy since this shape is added so much
+        :param x: start x position
+        :param y: start y position
+        :param z: start z position
+        :param w: width (in x direction)
+        :param l: length (in y direction)
+        :param t: thickness (in z direction)
+        :param mat_id: material id to use for the six faces        
+        """
+        p = len(self.fs)
+
+        self.append_all(self.vs, [(x, y, z), (x, y, z + t), (x + w, y, z), (x + w, y, z + t), (x, y + l, z),
+                                  (x, y + l, z + t), (x + w, y + l, z), (x + w, y + l, z + t)])
+        self.append_all(self.fs, [(p, p + 2, p + 3, p + 1), (p + 2, p + 6, p + 7, p + 3), (p + 1, p + 3, p + 7, p + 5),
+                                  (p + 6, p + 4, p + 5, p + 7), (p, p + 1, p + 5, p + 4), (p, p + 4, p + 6, p + 2)])
+        self.append_all(self.ms, [mat_id for i in range(6)])
+
+    def tile_grout(self):
+        z = self.thickness - self.mortar_depth
+        x = self.width
+        y = self.length
+
+        self.append_all(self.vs, [(0.0, 0.0, 0.0), (0.0, 0.0, z), (x, 0.0, z), (x, 0.0, 0.0), (0.0, y, 0.0),
+                                  (0.0, y, z), (x, y, z), (x, y, 0.0)])
+
+        self.append_all(self.fs, [(0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4), (1, 2, 6, 5), (3, 7, 6, 2), (0, 4, 7, 3)])
+
+        self.append_all(self.ms, [0 for i in range(6)])  # set to different material
+
+    def tile_regular(self):
+        """
+         ____  ____  ____
+        |    ||    ||    | Regular tile, rows can be offset, either manually or randomly
+        |____||____||____|
+           ____  ____  ____
+          |    ||    ||    |
+          |____||____||____| 
+        """
+        off = False
+        o = 1 / (100 / self.offset)
+        cur_y = 0.0
+        z = self.thickness
+
+        while cur_y < self.length:
+            cur_x = 0.0
+            tl2 = self.tile_length
+            if cur_y < self.length < cur_y + self.tile_length:
+                tl2 = self.length - cur_y
+
+            while cur_x < self.width:
+                p = len(self.vs)
+
+                tw2 = self.tile_width
+                if cur_x < self.width < cur_x + self.tile_widthil:
+                    tw2 = self.width - cur_x
+                elif cur_x == 0.0 and off and self.offset_tiles and not self.random_offset:
+                    tw2 = self.tile_width * o
+                elif cur_x == 0.0 and self.offset_tiles and self.random_offset:
+                    v = self.tile_length * 0.0049 * self.offset_variance
+                    tw2 = uniform((self.tile_length / 2) - v, (self.tile_length / 2) + v)
+
+                self.append_all(self.vs, [(cur_x, cur_y + tl2, 0.0), (cur_x, cur_y + tl2, z), (cur_x, cur_y, z),
+                                          (cur_x, cur_y, 0.0)])
+                cur_x += tw2
+                self.append_all(self.vs, [(cur_x, cur_y + tl2, 0.0), (cur_x, cur_y + tl2, z), (cur_x, cur_y, z),
+                                          (cur_x, cur_y, 0.0)])
+                cur_x += self.spacing
+
+                self.append_all(self.fs, [(p, p + 3, p + 2, p + 1), (p + 4, p + 5, p + 6, p + 7),
+                                          (p, p + 4, p + 7, p + 3), (p + 3, p + 7, p + 6, p + 2),
+                                          (p + 1, p + 2, p + 6, p + 5), (p, p + 1, p + 5, p + 4)])
+                self.append_all(self.ms, [0 for i in range(6)])
+
+            cur_y += tl2 + self.spacing
+            off = not off
+
+    def tile_large_small(self):
+        """
+         ____  _  Large tile, plus small one on top right corner
+        |    ||_|
+        |____| ____  _  But shifted up so next large one is right below previous small one
+              |    ||_|
+              |____| 
+        """
+        cur_y = 0
+        start_half = False
+        th = self.thickness
+
+        s_tw = (self.tile_width - self.spacing) / 2  # small tile width
+        s_tl = (self.tile_length - self.spacing) / 2  # small tile length
+        tl = self.tile_width
+        tw = self.tile_width
+
+        while cur_y < self.length:
+            cur_x = 0
+
+            while cur_x < self.width:
+                # adjust for starting with only half width on the big tile
+                if start_half:
+                    tw2 = tw / 2
+                else:
+                    tw2 = tw
+
+                if cur_x + tw2 > self.width:
+                    tw2 = self.width - cur_x
+
+                self.add_cube(cur_x, cur_y, 0, tw2, tl, th)
+
+            start_half = not start_half
 
     def wood_regular(self):
         """
@@ -226,6 +374,8 @@ class archipack_floor(Manipulable, PropertyGroup):
                 self.append_all(self.fs, [(p, p + 3, p + 2, p + 1), (p, p + 4, p + 7, p + 3),
                                           (p + 3, p + 7, p + 6, p + 2), (p + 1, p + 2, p + 6, p + 5),
                                           (p, p + 1, p + 5, p + 4), (p + 4, p + 5, p + 6, p + 7)])
+                self.append_all(self.ms, [0 for i in range(6)])
+
                 counter += 1
 
             cur_x += bw2 + self.width_spacing
@@ -273,6 +423,7 @@ class archipack_floor(Manipulable, PropertyGroup):
                             self.append_all(self.fs, [(p, p + 3, p + 2, p + 1), (p + 4, p + 5, p + 6, p + 7),
                                                       (p, p + 4, p + 7, p + 3), (p + 3, p + 7, p + 6, p + 2),
                                                       (p + 1, p + 2, p + 6, p + 5), (p, p + 1, p + 5, p + 4)])
+                            self.append_all(self.ms, [0 for i in range(6)])
 
                     cur_x = start_x
                     cur_y += bl2 + self.spacing
@@ -297,6 +448,7 @@ class archipack_floor(Manipulable, PropertyGroup):
                             self.append_all(self.fs, [(p, p + 3, p + 2, p + 1), (p + 4, p + 5, p + 6, p + 7),
                                                       (p, p + 4, p + 7, p + 3), (p + 3, p + 7, p + 6, p + 2),
                                                       (p + 1, p + 2, p + 6, p + 5), (p, p + 1, p + 5, p + 4)])
+                            self.append_all(self.ms, [0 for i in range(6)])
 
                 orient_length = not orient_length
 
@@ -313,7 +465,10 @@ class archipack_floor(Manipulable, PropertyGroup):
                 self.wood_parquet()
 
         elif self.floor_material == "tile":
-            pass
+            self.tile_grout()
+
+            if self.tile_style == "regular":
+                self.tile_regular()
 
     @property
     def verts(self):

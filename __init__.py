@@ -83,7 +83,8 @@ class archipack_floor(Manipulable, PropertyGroup):
     )
     tile_style = EnumProperty(
         name='tile style', items=(("regular", "Regular", ""), ("hopscotch", "Hopscotch", ""),
-                                  ("stepping_stone", "Stepping Stone", ""), ("hexagon", "Hexagon", "")),
+                                  ("stepping_stone", "Stepping Stone", ""), ("hexagon", "Hexagon", ""),
+                                  ("windmill", "Windmill", "")),
         default="regular", update=update
     )
 
@@ -396,6 +397,29 @@ class archipack_floor(Manipulable, PropertyGroup):
 
             row = (row + 1) % 2
 
+    def tile_windmill(self):
+        th = self.thickness
+        sp = self.spacing
+
+        tw = self.tile_width
+        tl = self.tile_length
+        s_tw = (tw - sp) / 2
+        s_tl = (tl - sp) / 2
+
+        cur_y = 0
+        while cur_y < self.length:
+            cur_x = 0
+
+            while cur_x < self.width:
+                self.add_cube(cur_x, cur_y, 0, tw, s_tl, th)  # bottom
+                self.add_cube(cur_x + tw + sp, cur_y, 0, s_tw, tl, th)  # right
+                self.add_cube(cur_x + s_tw + sp, cur_y + tl + sp, 0, tw, s_tl, th)  # top
+                self.add_cube(cur_x, cur_y + s_tl + sp, 0, s_tw, tl, th)  # left
+                self.add_cube(cur_x + s_tw + sp, cur_y + s_tl + sp, 0, s_tw, s_tl, th)  # center
+
+                cur_x += tw + s_tw + (2*sp)
+            cur_y += tl + s_tl + (2*sp)
+
     def wood_regular(self):
         """
         ||| Typical wood boards
@@ -528,6 +552,8 @@ class archipack_floor(Manipulable, PropertyGroup):
                 self.tile_hopscotch()
             elif self.tile_style == "stepping_stone":
                 self.tile_stepping_stone()
+            elif self.tile_style == "windmill":
+                self.tile_windmill()
 
     @property
     def verts(self):

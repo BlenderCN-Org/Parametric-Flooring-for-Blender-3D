@@ -76,14 +76,14 @@ class archipack_floor(Manipulable, PropertyGroup):
         name="floor material", items=(("wood", "Wood", ""), ("tile", "Tile", "")),
         default="wood", description="Type of material the floor is made of", update=update
     )
-    wood_styles = EnumProperty(
+    wood_style = EnumProperty(
         name='wood style', items=(("regular", "Regular", ""), ("parquet", "Parquet", ""),
                                   ("herring_parquet", "Herringbone Parquet", ""), ("herring", "Herringbone", "")),
         default="regular", description="Style of wood floor", update=update
     )
-    tile_styles = EnumProperty(
-        name='tile style', items=(("regular", "Regular", ""), ("large_small", "Large + Small", ""),
-                                  ("large_many_small", "Large + Many Small", ""), ("hexagon", "Hexagon", "")),
+    tile_style = EnumProperty(
+        name='tile style', items=(("regular", "Regular", ""), ("hopscotch", "Hopscotch", ""),
+                                  ("stepping_stone", "Stepping Stone", ""), ("hexagon", "Hexagon", "")),
         default="regular", update=update
     )
 
@@ -291,7 +291,7 @@ class archipack_floor(Manipulable, PropertyGroup):
             cur_y += tl2 + self.spacing
             off = not off
 
-    def tile_large_small(self):
+    def tile_hopscotch(self):
         """
          ____  _  Large tile, plus small one on top right corner
         |    ||_|
@@ -312,7 +312,7 @@ class archipack_floor(Manipulable, PropertyGroup):
         s_tl = (tl - sp) / 2  # small tile length
 
         pre_y = cur_y
-        while cur_y < self.length:
+        while cur_y < self.length or (row == 2 and cur_y - s_tl - sp < self.length):
             cur_x = 0
             step_back = True
 
@@ -355,6 +355,46 @@ class archipack_floor(Manipulable, PropertyGroup):
             pre_y = cur_y
 
             row = (row + 1) % 3  # keep wrapping rows
+
+    def tile_stepping_stone(self):
+        """
+         ____  __  ____
+        |    ||__||    | Row of large one, then two small ones stacked beside it
+        |    | __ |    |
+        |____||__||____|
+         __  __  __  __
+        |__||__||__||__| Row of smalls
+        """
+        th = self.thickness
+        sp = self.spacing
+        cur_y = 0.0
+        row = 0
+
+        tw = self.tile_width
+        tl = self.tile_length
+        s_tw = (tw - sp) / 2
+        s_tl = (tl - sp) / 2
+
+        while cur_y < self.length:
+            cur_x = 0
+
+            while cur_x < self.width:
+                if row == 0:  # large one then two small ones stacked beside it
+                    self.add_cube(cur_x, cur_y, 0, tw, tl, th)
+                    self.add_cube(cur_x + tw + sp, cur_y, 0, s_tw, s_tl, th)
+                    self.add_cube(cur_x + tw + sp, cur_y + s_tl + sp, 0, s_tw, s_tl, th)
+                    cur_x += tw + s_tw + (2 * sp)
+                else:  # row of small ones
+                    self.add_cube(cur_x, cur_y, 0, s_tw, s_tl, th)
+                    self.add_cube(cur_x + s_tw + sp, cur_y, 0, s_tw, s_tl, th)
+                    cur_x += tw + sp
+
+            if row == 0:
+                cur_y += tl + sp
+            else:
+                cur_y += s_tl + sp
+
+            row = (row + 1) % 2
 
     def wood_regular(self):
         """
@@ -474,18 +514,20 @@ class archipack_floor(Manipulable, PropertyGroup):
         self.vs, self.fs, self.ms = [], [], []
 
         if self.floor_material == "wood":
-            if self.wood_styles == "regular":
+            if self.wood_style == "regular":
                 self.wood_regular()
-            elif self.wood_styles == "parquet":
+            elif self.wood_style == "parquet":
                 self.wood_parquet()
 
         elif self.floor_material == "tile":
             self.tile_grout()
 
-            if self.tile_styles == "regular":
+            if self.tile_style == "regular":
                 self.tile_regular()
-            elif self.tile_styles == "large_small":
-                self.tile_large_small()
+            elif self.tile_style == "hopscotch":
+                self.tile_hopscotch()
+            elif self.tile_style == "stepping_stone":
+                self.tile_stepping_stone()
 
     @property
     def verts(self):
@@ -530,9 +572,9 @@ class archipack_floor(Manipulable, PropertyGroup):
         BmeshEdit.buildmesh(context, o, self.verts, self.faces)  # , matids=self.matids, uvs=self.uvs)
 
         # setup 3d points for gl manipulators
-        self.manipulators[0].set_pts([(0, 0, 0), (self.width, 0, 0), (1, 0, 0)])
-        self.manipulators[1].set_pts([(0, 0, 0), (0, self.length, 0), (-1, 0, 0)])
-        self.manipulators[2].set_pts([(0, 0, 0), (0, 0, self.thickness), (-1, 0, 0)])
+        self.manipulators[0].set_pts([(0, 0, 0), (self.width, 0, 0), (0.5, 0, 0)])
+        self.manipulators[1].set_pts([(0, 0, 0), (0, self.length, 0), (-0.5, 0, 0)])
+        self.manipulators[2].set_pts([(0, 0, 0), (0, 0, self.thickness), (-0.5, 0, 0)])
 
         if self.floor_material == "wood":
             self.manipulators[3].prop1_name = "board_length"
@@ -574,9 +616,9 @@ class ARCHIPACK_PT_floor(Panel):
         layout.prop(props, 'floor_material')
 
         if props.floor_material == "wood":
-            layout.prop(props, 'wood_styles')
+            layout.prop(props, 'wood_style')
         elif props.floor_material == 'tile':
-            layout.prop(props, 'tile_styles')
+            layout.prop(props, 'tile_style')
 
         layout.prop(props, 'width')
         layout.prop(props, 'length')

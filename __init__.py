@@ -76,12 +76,12 @@ class archipack_floor(Manipulable, PropertyGroup):
         name="floor material", items=(("wood", "Wood", ""), ("tile", "Tile", "")),
         default="wood", description="Type of material the floor is made of", update=update
     )
-    wood_style = EnumProperty(
+    wood_styles = EnumProperty(
         name='wood style', items=(("regular", "Regular", ""), ("parquet", "Parquet", ""),
                                   ("herring_parquet", "Herringbone Parquet", ""), ("herring", "Herringbone", "")),
         default="regular", description="Style of wood floor", update=update
     )
-    tile_style = EnumProperty(
+    tile_styles = EnumProperty(
         name='tile style', items=(("regular", "Regular", ""), ("large_small", "Large + Small", ""),
                                   ("large_many_small", "Large + Many Small", ""), ("hexagon", "Hexagon", "")),
         default="regular", update=update
@@ -218,7 +218,7 @@ class archipack_floor(Manipulable, PropertyGroup):
         for i in add:
             v_list.append(i)
 
-    def add_cube(self, x, y, z, w, l, t, mat_id=0):
+    def add_cube(self, x, y, z, w, l, t, clip=True, mat_id=0):
         """
         Adds vertices, faces, and material ids for a cube, makes it easy since this shape is added so much
         :param x: start x position
@@ -227,9 +227,19 @@ class archipack_floor(Manipulable, PropertyGroup):
         :param w: width (in x direction)
         :param l: length (in y direction)
         :param t: thickness (in z direction)
+        :param clip: trim back mesh to be within length and width
         :param mat_id: material id to use for the six faces        
         """
-        p = len(self.fs)
+        p = len(self.vs)
+
+        # if starting point is greater than bounds, don't even bother
+        if clip and (x >= self.width or y >= self.length):
+            return
+
+        if clip and x + w > self.width:
+            w = self.width - x
+        if clip and y + l > self.length:
+            l = self.length - y
 
         self.append_all(self.vs, [(x, y, z), (x, y, z + t), (x + w, y, z), (x + w, y, z + t), (x, y + l, z),
                                   (x, y + l, z + t), (x + w, y + l, z), (x + w, y + l, z + t)])
@@ -242,12 +252,7 @@ class archipack_floor(Manipulable, PropertyGroup):
         x = self.width
         y = self.length
 
-        self.append_all(self.vs, [(0.0, 0.0, 0.0), (0.0, 0.0, z), (x, 0.0, z), (x, 0.0, 0.0), (0.0, y, 0.0),
-                                  (0.0, y, z), (x, y, z), (x, y, 0.0)])
-
-        self.append_all(self.fs, [(0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4), (1, 2, 6, 5), (3, 7, 6, 2), (0, 4, 7, 3)])
-
-        self.append_all(self.ms, [0 for i in range(6)])  # set to different material
+        self.add_cube(0, 0, 0, x, y, z, mat_id=1)
 
     def tile_regular(self):
         """
@@ -270,10 +275,9 @@ class archipack_floor(Manipulable, PropertyGroup):
                 tl2 = self.length - cur_y
 
             while cur_x < self.width:
-                p = len(self.vs)
-
                 tw2 = self.tile_width
-                if cur_x < self.width < cur_x + self.tile_widthil:
+
+                if cur_x < self.width < cur_x + self.tile_width:
                     tw2 = self.width - cur_x
                 elif cur_x == 0.0 and off and self.offset_tiles and not self.random_offset:
                     tw2 = self.tile_width * o
@@ -281,17 +285,8 @@ class archipack_floor(Manipulable, PropertyGroup):
                     v = self.tile_length * 0.0049 * self.offset_variance
                     tw2 = uniform((self.tile_length / 2) - v, (self.tile_length / 2) + v)
 
-                self.append_all(self.vs, [(cur_x, cur_y + tl2, 0.0), (cur_x, cur_y + tl2, z), (cur_x, cur_y, z),
-                                          (cur_x, cur_y, 0.0)])
-                cur_x += tw2
-                self.append_all(self.vs, [(cur_x, cur_y + tl2, 0.0), (cur_x, cur_y + tl2, z), (cur_x, cur_y, z),
-                                          (cur_x, cur_y, 0.0)])
-                cur_x += self.spacing
-
-                self.append_all(self.fs, [(p, p + 3, p + 2, p + 1), (p + 4, p + 5, p + 6, p + 7),
-                                          (p, p + 4, p + 7, p + 3), (p + 3, p + 7, p + 6, p + 2),
-                                          (p + 1, p + 2, p + 6, p + 5), (p, p + 1, p + 5, p + 4)])
-                self.append_all(self.ms, [0 for i in range(6)])
+                self.add_cube(cur_x, cur_y, 0, tw2, tl2, z)
+                cur_x += tw2 + self.spacing
 
             cur_y += tl2 + self.spacing
             off = not off
@@ -305,30 +300,61 @@ class archipack_floor(Manipulable, PropertyGroup):
               |____| 
         """
         cur_y = 0
-        start_half = False
         th = self.thickness
+        sp = self.spacing
 
-        s_tw = (self.tile_width - self.spacing) / 2  # small tile width
-        s_tl = (self.tile_length - self.spacing) / 2  # small tile length
-        tl = self.tile_width
+        # movement variables
+        row = 0
+
         tw = self.tile_width
+        tl = self.tile_length
+        s_tw = (tw - sp) / 2  # small tile width
+        s_tl = (tl - sp) / 2  # small tile length
 
+        pre_y = cur_y
         while cur_y < self.length:
             cur_x = 0
+            step_back = True
+
+            if row == 1:  # row start indented slightly
+                cur_x = s_tw + sp
 
             while cur_x < self.width:
-                # adjust for starting with only half width on the big tile
-                if start_half:
-                    tw2 = tw / 2
+                if row == 0 or row == 1:
+                    # adjust for if there is a need to cut off the bottom of the tile
+                    if cur_y < 0:
+                        self.add_cube(cur_x, 0, 0, tw, tl + cur_y, th)  # large one
+                    else:
+                        self.add_cube(cur_x, cur_y, 0, tw, tl, th)  # large one
+
+                    self.add_cube(cur_x + tw + sp, cur_y + s_tl + sp, 0, s_tw, s_tl, th)  # small one
+
+                    if step_back:
+                        cur_x += tw + sp
+                        cur_y -= s_tl + sp
+                    else:
+                        cur_x += tw + s_tw + 2*sp
+                        cur_y += s_tl + sp
+
+                    step_back = not step_back
                 else:
-                    tw2 = tw
+                    if cur_x == 0:  # half width for starting position
+                        self.add_cube(cur_x, cur_y, 0, s_tw, tl, th)  # large one
+                        self.add_cube(cur_x + s_tw + sp, cur_y + s_tl + sp, 0, s_tw, s_tl, th)  # small one on right
+                        self.add_cube(cur_x, cur_y - sp - s_tl, 0, s_tw, s_tl, th)  # small one on bottom
+                        cur_x += (2 * s_tw) + tw + (3 * sp)
+                    else:
+                        self.add_cube(cur_x, cur_y, 0, tw, tl, th)  # large one
+                        self.add_cube(cur_x + tw + sp, cur_y + s_tl + sp, 0, s_tw, s_tl, th)  # small one on right
+                        cur_x += (2 * tw) + (3*sp) + s_tw
 
-                if cur_x + tw2 > self.width:
-                    tw2 = self.width - cur_x
+            if row == 0 or row == 2:
+                cur_y = pre_y + tl + sp
+            else:
+                cur_y = pre_y + s_tl + sp
+            pre_y = cur_y
 
-                self.add_cube(cur_x, cur_y, 0, tw2, tl, th)
-
-            start_half = not start_half
+            row = (row + 1) % 3  # keep wrapping rows
 
     def wood_regular(self):
         """
@@ -456,19 +482,21 @@ class archipack_floor(Manipulable, PropertyGroup):
             cur_x += bl + self.spacing
 
     def update_data(self):
-        self.vs, self.fs = [], []
+        self.vs, self.fs, self.ms = [], [], []
 
         if self.floor_material == "wood":
-            if self.wood_style == "regular":
+            if self.wood_styles == "regular":
                 self.wood_regular()
-            elif self.wood_style == "parquet":
+            elif self.wood_styles == "parquet":
                 self.wood_parquet()
 
         elif self.floor_material == "tile":
             self.tile_grout()
 
-            if self.tile_style == "regular":
+            if self.tile_styles == "regular":
                 self.tile_regular()
+            elif self.tile_styles == "large_small":
+                self.tile_large_small()
 
     @property
     def verts(self):
@@ -536,9 +564,18 @@ class ARCHIPACK_PT_floor(Panel):
     def draw(self, context):
         layout = self.layout
         o = context.object
+
         o, props = ARCHIPACK_PT_floor.params(o)
         if props is None:
             return
+
+        layout.prop(props, 'floor_material')
+
+        if props.floor_material == "wood":
+            layout.prop(props, 'wood_styles')
+        elif props.floor_material == 'tile':
+            layout.prop(props, 'tile_styles')
+
         layout.prop(props, 'width')
         layout.prop(props, 'length')
         layout.prop(props, 'thickness')

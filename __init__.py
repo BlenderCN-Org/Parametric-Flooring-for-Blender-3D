@@ -43,11 +43,18 @@ bl_info = {
 
 import bpy
 from bpy.types import Operator, PropertyGroup, Mesh, Panel
-from bpy.props import FloatProperty, CollectionProperty
+from bpy.props import FloatProperty, CollectionProperty, BoolProperty, IntProperty, EnumProperty
 from mathutils import Vector
+from random import uniform
 from .bmesh_utils import BmeshEdit
 from .simple_manipulator import Manipulable
 
+# ------------------------------------------------------------------
+# Constants
+# ------------------------------------------------------------------
+
+FOOT = 0.3048  # 1 foot in meters
+INCH = 0.0254  # 1 inch in meters
 
 # ------------------------------------------------------------------
 # Define property class to store object parameters and update mesh
@@ -60,78 +67,281 @@ def update(self, context):
 
 class archipack_floor(Manipulable, PropertyGroup):
 
-    x = FloatProperty(
-            name='width',
-            min=0.25, max=10000,
-            default=100.0, precision=2,
-            description='Width', update=update,
-            )
-    y = FloatProperty(
-            name='depth',
-            min=0.1, max=10000,
-            default=0.80, precision=2,
-            description='Depth', update=update,
-            )
-    z = FloatProperty(
-            name='height',
-            min=0.1, max=10000,
-            default=2.0, precision=2,
-            description='Height', update=update,
-            )
+    # keep track of vertices and faces
+    vs, fs = [], []  # vertices and faces
+
+    # floor type
+    floor_material = EnumProperty(
+        name="floor material", items=(("wood", "Wood", ""), ("tile", "Tile", "")),
+        default="wood", description="Type of material the floor is made of", update=update
+    )
+    wood_style = EnumProperty(
+        name='wood style', items=(("regular", "Regular", ""), ("parquet", "Parquet", ""),
+                                  ("herring_parquet", "Herringbone Parquet", ""), ("herring", "Herringbone", "")),
+        default="regular", description="Style of wood floor", update=update
+    )
+    tile_style = EnumProperty(
+        name='tile style', items=(("regular", "Regular", ""), ("large_small", "Large + Small", ""),
+                                  ("large_many_small", "Large + Many Small", ""), ("hexagon", "Hexagon", "")),
+        default="regular", update=update
+    )
+
+    # overall length and width
+    width = FloatProperty(  # x
+        name='width',
+        min=2*FOOT, soft_max=100*FOOT,
+        default=20*FOOT, precision=2,
+        description='Width', update=update,
+        unit="LENGTH"
+    )
+    length = FloatProperty(  # y
+        name='length',
+        min=2*FOOT, soft_max=100*FOOT,
+        default=8*FOOT, precision=2,
+        description='Length', update=update,
+        unit="LENGTH"
+    )
+
+    # board thickness
+    thickness = FloatProperty(  # z
+        name='thickness',
+        min=0.25*INCH, soft_max=2*INCH,
+        default=1*INCH, precision=2,
+        description='Thickness', update=update,
+        unit="LENGTH"
+    )
+    vary_thickness = BoolProperty(
+        name='vary thickness', update=update, default=False,
+        description='Vary board thickness?'
+    )
+    thickness_variance = FloatProperty(
+        name='thickness variance', min=1, max=100,
+        default=50, update=update, precision=2,
+        description='How much board thickness can vary by'
+    )
+
+    # board width, variance, and spacing
+    board_width = FloatProperty(
+        name='board width', unit='LENGTH', min=2*INCH,
+        soft_max=2*FOOT, default=6*INCH, update=update,
+        description='The width of the boards', precision=2
+    )
+    vary_width = BoolProperty(
+        name='vary width', default=False,
+        description='Vary board width?', update=update
+    )
+    width_variance = FloatProperty(
+        name='width variance', subtype='PERCENTAGE',
+        min=1, max=100, default=50, description='How much board width can vary by',
+        precision=2, update=update
+    )
+    width_spacing = FloatProperty(
+        name='width spacing', unit='LENGTH', min=0, soft_max=1*INCH,
+        default=0.125*INCH, precision=2, update=update,
+        description='The amount of space between boards in the width direction'
+    )
+
+    # board length
+    board_length = FloatProperty(
+        name='board length', unit='LENGTH', min=2*FOOT,
+        soft_max=100*FOOT, default=8*FOOT, update=update,
+        description='The length of the boards', precision=2
+    )
+    vary_length = BoolProperty(
+        name='vary length', default=False,
+        description='Vary board length?', update=update
+    )
+    length_variance = FloatProperty(
+        name='length variance', subtype='PERCENTAGE',
+        min=1, max=100, default=50, description='How much board length can vary by',
+        precision=2, update=update
+    )
+    max_boards = IntProperty(
+        name='max boards', min=1, soft_max=10, default=2,
+        update=update, description='Max number of boards in one row'
+    )
+    length_spacing = FloatProperty(
+        name='length spacing', unit='LENGTH', min=0, soft_max=1*INCH,
+        default=0.125*INCH, precision=2, update=update,
+        description='The amount of space between boards in the length direction'
+    )
+
+    # parquet specific
+    boards_in_group = IntProperty(
+        name='boards in group', min=1, soft_max=10, default=4,
+        update=update, description='Number of boards in a group'
+    )
+    spacing = FloatProperty(
+        name='spacing', unit='LENGTH', min=0, soft_max=1*INCH,
+        default=0.125*INCH, precision=2, update=update,
+        description='The amount of space between boards in both directions'
+    )
+
+    @staticmethod
+    def append_all(v_list, add):
+        for i in add:
+            v_list.append(i)
+
+    def wood_regular(self):
+        """
+        ||| Typical wood boards
+        |||
+        """
+        cur_x = 0.0
+        zt = self.thickness
+        bw, bl = self.board_width, self.board_length
+
+        while cur_x < self.width:
+            if self.vary_width:
+                v = bw * (self.width_variance / 100) * 0.99
+                bw2 = uniform(bw - v, bw + v)
+            else:
+                bw2 = bw
+
+            if bw2 + cur_x > self.width:
+                bw2 = self.width - cur_x
+            cur_y = 0.0
+
+            counter = 1
+            while cur_y < self.length:
+                z = zt
+                if self.vary_thickness:
+                    v = z * 0.99 * (self.thickness_variance / 100)
+                    z = uniform(z - v, z + v)
+                bl2 = bl
+                if self.vary_length:
+                    v = bl * (self.length_variance / 100) * 0.99
+                    bl2 = uniform(bl - v, bl + v)
+                if (counter >= self.max_boards and self.vary_length) or cur_y + bl2 > self.length:
+                    bl2 = self.length - cur_y
+                p = len(self.vs)
+
+                self.append_all(self.vs, [(cur_x, cur_y, 0.0), (cur_x, cur_y, z), (cur_x + bw2, cur_y, z),
+                                          (cur_x + bw2, cur_y, 0.0)])
+                cur_y += bl2
+                self.append_all(self.vs, [(cur_x, cur_y, 0.0), (cur_x, cur_y, z), (cur_x + bw2, cur_y, z),
+                                          (cur_x + bw2, cur_y, 0.0)])
+                cur_y += self.length_spacing
+
+                self.append_all(self.fs, [(p, p + 3, p + 2, p + 1), (p, p + 4, p + 7, p + 3),
+                                          (p + 3, p + 7, p + 6, p + 2), (p + 1, p + 2, p + 6, p + 5),
+                                          (p, p + 1, p + 5, p + 4), (p + 4, p + 5, p + 6, p + 7)])
+                counter += 1
+
+            cur_x += bw2 + self.width_spacing
+
+    def wood_parquet(self):
+        """
+        ||--||-- Alternating groups oriented either horizontally, or forwards and backwards.
+        ||--||-- self.spacing is used because it is the same spacing for width and length
+        --||--||
+        --||--||
+        """
+        cur_x = 0.0
+        z = self.thickness
+        start_orient_length = True
+
+        # figure board length
+        bl = (self.board_width * self.boards_in_group) + (self.spacing * (self.boards_in_group - 1))
+        while cur_x < self.width:
+            cur_y = 0.0
+            orient_length = start_orient_length
+            while cur_y < self.length:
+                bl2 = bl
+                bw2 = self.board_width
+
+                if orient_length:
+                    start_x = cur_x
+
+                    for i in range(self.boards_in_group):
+                        if cur_x < self.width and cur_y < self.length:
+                            # make sure board should be placed
+                            if cur_x < self.width < cur_x + self.board_width:
+                                bw2 = self.width - cur_x
+                            if cur_y < self.length < cur_y + bl:
+                                bl2 = self.length - cur_y
+                            p = len(self.vs)
+
+                            self.append_all(self.vs, [(cur_x, cur_y, 0.0), (cur_x, cur_y, z), (cur_x + bw2, cur_y, z),
+                                                      (cur_x + bw2, cur_y, 0.0)])
+                            cur_y += bl2
+                            self.append_all(self.vs, [(cur_x, cur_y, 0.0), (cur_x, cur_y, z), (cur_x + bw2, cur_y, z),
+                                                      (cur_x + bw2, cur_y, 0.0)])
+                            cur_y -= bl2
+                            cur_x += bw2 + self.spacing
+
+                            self.append_all(self.fs, [(p, p + 3, p + 2, p + 1), (p + 4, p + 5, p + 6, p + 7),
+                                                      (p, p + 4, p + 7, p + 3), (p + 3, p + 7, p + 6, p + 2),
+                                                      (p + 1, p + 2, p + 6, p + 5), (p, p + 1, p + 5, p + 4)])
+
+                    cur_x = start_x
+                    cur_y += bl2 + self.spacing
+
+                else:
+                    for i in range(self.boards_in_group):
+                        if cur_x < self.width and cur_y < self.length:
+                            if cur_x < self.width < cur_x + bl:
+                                bl2 = self.width - cur_x
+                            if cur_y < self.length < cur_y + self.board_width:
+                                bw2 = self.length - cur_y
+                            p = len(self.vs)
+
+                            self.append_all(self.vs, [(cur_x, cur_y + bw2, 0.0), (cur_x, cur_y + bw2, z),
+                                                      (cur_x, cur_y, z), (cur_x, cur_y, 0.0)])
+                            cur_x += bl2
+                            self.append_all(self.vs, [(cur_x, cur_y + bw2, 0.0), (cur_x, cur_y + bw2, z),
+                                                      (cur_x, cur_y, z), (cur_x, cur_y, 0.0)])
+                            cur_x -= bl2
+                            cur_y += bw2 + self.spacing
+
+                            self.append_all(self.fs, [(p, p + 3, p + 2, p + 1), (p + 4, p + 5, p + 6, p + 7),
+                                                      (p, p + 4, p + 7, p + 3), (p + 3, p + 7, p + 6, p + 2),
+                                                      (p + 1, p + 2, p + 6, p + 5), (p, p + 1, p + 5, p + 4)])
+
+                orient_length = not orient_length
+
+            start_orient_length = not start_orient_length
+            cur_x += bl + self.spacing
+
+    def update_data(self):
+        self.vs, self.fs = [], []
+
+        if self.floor_material == "wood":
+            if self.wood_style == "regular":
+                self.wood_regular()
+            elif self.wood_style == "parquet":
+                self.wood_parquet()
+
+        elif self.floor_material == "tile":
+            pass
 
     @property
     def verts(self):
         """
             Object vertices coords
         """
-        x = self.x
-        y = self.y
-        z = self.z
-        return [
-            (0, y, 0),
-            (0, 0, 0),
-            (x, 0, 0),
-            (x, y, 0),
-            (0, y, z),
-            (0, 0, z),
-            (x, 0, z),
-            (x, y, z)
-        ]
+        return self.vs
 
     @property
     def faces(self):
         """
             Object faces vertices index
         """
-        return [
-            (0, 1, 2, 3),
-            (7, 6, 5, 4),
-            (7, 4, 0, 3),
-            (4, 5, 1, 0),
-            (5, 6, 2, 1),
-            (6, 7, 3, 2)
-        ]
+        return self.fs
 
     @property
     def uvs(self):
         """
             Object faces uv coords
         """
-        return [
-            [(0, 0), (0, 1), (1, 1), (1, 0)],
-            [(0, 0), (0, 1), (1, 1), (1, 0)],
-            [(0, 0), (0, 1), (1, 1), (1, 0)],
-            [(0, 0), (0, 1), (1, 1), (1, 0)],
-            [(0, 0), (0, 1), (1, 1), (1, 0)],
-            [(0, 0), (0, 1), (1, 1), (1, 0)]
-        ]
+        return []
 
     @property
     def matids(self):
         """
             Object material indexes
         """
-        return [0, 0, 0, 0, 0, 0]
+        return []
 
     def update(self, context):
 
@@ -144,12 +354,13 @@ class archipack_floor(Manipulable, PropertyGroup):
         o.select = True
         context.scene.objects.active = o
 
-        BmeshEdit.buildmesh(context, o, self.verts, self.faces, matids=self.matids, uvs=self.uvs)
+        self.update_data()  # update vertices and faces
+        BmeshEdit.buildmesh(context, o, self.verts, self.faces)  # , matids=self.matids, uvs=self.uvs)
 
         # setup 3d points for gl manipulators
-        self.manipulators[0].set_pts([(0, 0, 0), (self.x, 0, 0), (1, 0, 0)])
-        self.manipulators[1].set_pts([(0, 0, 0), (0, self.y, 0), (-1, 0, 0)])
-        self.manipulators[2].set_pts([(self.x, 0, 0), (self.x, 0, self.z), (-1, 0, 0)])
+        self.manipulators[0].set_pts([(0, 0, 0), (self.width, 0, 0), (1, 0, 0)])
+        self.manipulators[1].set_pts([(0, 0, 0), (0, self.length, 0), (-1, 0, 0)])
+        self.manipulators[2].set_pts([(0, 0, 0), (0, 0, self.thickness), (-1, 0, 0)])
 
         # restore context
         old.select = True
@@ -173,9 +384,9 @@ class ARCHIPACK_PT_floor(Panel):
         o, props = ARCHIPACK_PT_floor.params(o)
         if props is None:
             return
-        layout.prop(props, 'x')
-        layout.prop(props, 'y')
-        layout.prop(props, 'z')
+        layout.prop(props, 'width')
+        layout.prop(props, 'length')
+        layout.prop(props, 'thickness')
         layout.operator("archipack.floor_manipulate")
 
     @classmethod
@@ -211,25 +422,6 @@ class ARCHIPACK_OT_floor(Operator):
     bl_category = 'Sample'
     bl_options = {'REGISTER', 'UNDO'}
 
-    x = FloatProperty(
-            name='width',
-            min=0.1, max=10000,
-            default=0.80, precision=2,
-            description='Width'
-            )
-    y = FloatProperty(
-            name='depth',
-            min=0.1, max=10000,
-            default=0.80, precision=2,
-            description='Depth'
-            )
-    z = FloatProperty(
-            name='height',
-            min=0.1, max=10000,
-            default=2.0, precision=2,
-            description='height'
-            )
-
     def create(self, context):
         """
             expose only basic params in operator
@@ -241,19 +433,19 @@ class ARCHIPACK_OT_floor(Operator):
         # attach parametric datablock
         d = m.archipack_floor.add()
 
-        # update params
-        d.x = self.x
-        d.y = self.y
-        d.z = self.z
-
         # setup manipulators for on screen editing
         s = d.manipulators.add()
-        s.prop1_name = "x"
+        s.prop1_name = "width"
+        s.type = 'SIZE'
+
         s = d.manipulators.add()
-        s.prop1_name = "y"
+        s.prop1_name = "length"
+        s.type = 'SIZE'
+
         s = d.manipulators.add()
         s.normal = Vector((0, 1, 0))
-        s.prop1_name = "z"
+        s.prop1_name = "thickness"
+        s.type = 'SIZE'
 
         context.scene.objects.link(o)
         # make newly created object active

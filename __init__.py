@@ -388,20 +388,9 @@ class archipack_floor(Manipulable, PropertyGroup):
                     bl2 = uniform(bl - v, bl + v)
                 if (counter >= self.max_boards and self.vary_length) or cur_y + bl2 > self.length:
                     bl2 = self.length - cur_y
-                p = len(self.vs)
 
-                self.append_all(self.vs, [(cur_x, cur_y, 0.0), (cur_x, cur_y, z), (cur_x + bw2, cur_y, z),
-                                          (cur_x + bw2, cur_y, 0.0)])
-                cur_y += bl2
-                self.append_all(self.vs, [(cur_x, cur_y, 0.0), (cur_x, cur_y, z), (cur_x + bw2, cur_y, z),
-                                          (cur_x + bw2, cur_y, 0.0)])
-                cur_y += self.length_spacing
-
-                self.append_all(self.fs, [(p, p + 3, p + 2, p + 1), (p, p + 4, p + 7, p + 3),
-                                          (p + 3, p + 7, p + 6, p + 2), (p + 1, p + 2, p + 6, p + 5),
-                                          (p, p + 1, p + 5, p + 4), (p + 4, p + 5, p + 6, p + 7)])
-                self.append_all(self.ms, [0 for i in range(6)])
-
+                self.add_cube(cur_x, cur_y, 0, bw2, bl2, z)
+                cur_y += bl2 + self.length_spacing
                 counter += 1
 
             cur_x += bw2 + self.width_spacing
@@ -545,6 +534,19 @@ class archipack_floor(Manipulable, PropertyGroup):
         self.manipulators[1].set_pts([(0, 0, 0), (0, self.length, 0), (-1, 0, 0)])
         self.manipulators[2].set_pts([(0, 0, 0), (0, 0, self.thickness), (-1, 0, 0)])
 
+        if self.floor_material == "wood":
+            self.manipulators[3].prop1_name = "board_length"
+            self.manipulators[3].set_pts([(0, 0, 0), (0, self.board_length, 0), (-0.2, 0, 0)])
+
+            self.manipulators[4].prop1_name = "board_width"
+            self.manipulators[4].set_pts([(0, 0, self.thickness), (self.board_width, 0, self.thickness), (-0.2, 0, 0)])
+        else:
+            self.manipulators[3].prop1_name = "tile_length"
+            self.manipulators[3].set_pts([(0, 0, 0), (0, self.tile_length, 0), (-0.2, 0, 0)])
+
+            self.manipulators[4].prop1_name = "tile_width"
+            self.manipulators[4].set_pts([(0, 0, self.thickness), (self.tile_width, 0, self.thickness), (-0.2, 0, 0)])
+
         # restore context
         old.select = True
         context.scene.objects.active = old
@@ -628,16 +630,20 @@ class ARCHIPACK_OT_floor(Operator):
         # setup manipulators for on screen editing
         s = d.manipulators.add()
         s.prop1_name = "width"
-        s.type = 'SIZE'
 
         s = d.manipulators.add()
         s.prop1_name = "length"
-        s.type = 'SIZE'
 
         s = d.manipulators.add()
         s.normal = Vector((0, 1, 0))
         s.prop1_name = "thickness"
-        s.type = 'SIZE'
+
+        # start as wood, but will be changed if they need to be tile
+        s = d.manipulators.add()
+        s.prop1_name = "board_length"
+
+        s = d.manipulators.add()
+        s.prop1_name = "board_width"
 
         context.scene.objects.link(o)
         # make newly created object active

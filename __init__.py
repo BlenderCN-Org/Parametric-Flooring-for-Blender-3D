@@ -402,6 +402,13 @@ class archipack_floor(Manipulable, PropertyGroup):
         pass
 
     def tile_windmill(self):
+        """
+         __  ____
+        |  ||____| This also has a square one in the middle, totaling 5 tiles per pattern
+        |__|   __
+         ____ |  |
+        |____||__|  
+        """
         th = self.thickness
         sp = self.spacing
 

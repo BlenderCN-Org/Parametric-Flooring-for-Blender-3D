@@ -78,8 +78,9 @@ class archipack_floor(Manipulable, PropertyGroup):
     )
     wood_style = EnumProperty(
         name='wood style', items=(("regular", "Regular", ""), ("parquet", "Parquet", ""),
-                                  ("herring_parquet", "Herringbone Parquet", ""), ("herring", "Herringbone", "")),
-        default="regular", description="Style of wood floor", update=update
+                                  ("herringbone_parquet", "Herringbone Parquet", ""),
+                                  ("herringbone", "Herringbone", "")), default="regular",
+        description="Style of wood floor", update=update
     )
     tile_style = EnumProperty(
         name='tile style', items=(("regular", "Regular", ""), ("hopscotch", "Hopscotch", ""),
@@ -397,6 +398,9 @@ class archipack_floor(Manipulable, PropertyGroup):
 
             row = (row + 1) % 2
 
+    def tile_hexagon(self):
+        pass
+
     def tile_windmill(self):
         th = self.thickness
         sp = self.spacing
@@ -534,7 +538,14 @@ class archipack_floor(Manipulable, PropertyGroup):
             start_orient_length = not start_orient_length
             cur_x += bl + self.spacing
 
+    def wood_herringbone(self):
+        pass
+
+    def wood_herringbone_parquet(self):
+        pass
+
     def update_data(self):
+        # clear data before refreshing it
         self.vs, self.fs, self.ms = [], [], []
 
         if self.floor_material == "wood":
@@ -542,9 +553,13 @@ class archipack_floor(Manipulable, PropertyGroup):
                 self.wood_regular()
             elif self.wood_style == "parquet":
                 self.wood_parquet()
+            elif self.wood_style == "herringbone":
+                self.wood_herringbone()
+            elif self.wood_style == "herringbone_parquet":
+                self.wood_herringbone_parquet()
 
         elif self.floor_material == "tile":
-            self.tile_grout()
+            self.tile_grout()  # create grout
 
             if self.tile_style == "regular":
                 self.tile_regular()
@@ -552,6 +567,8 @@ class archipack_floor(Manipulable, PropertyGroup):
                 self.tile_hopscotch()
             elif self.tile_style == "stepping_stone":
                 self.tile_stepping_stone()
+            elif self.tile_style == "hexagon":
+                self.tile_hexagon()
             elif self.tile_style == "windmill":
                 self.tile_windmill()
 

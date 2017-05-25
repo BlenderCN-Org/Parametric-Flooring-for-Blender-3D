@@ -24,6 +24,7 @@
 # Blender Parametric object skeleton
 # Author: Stephen Leger (s-leger)
 # ----------------------------------------------------------
+
 bl_info = {
     'name': 'Floor',
     'description': 'Floor parametric object',
@@ -46,6 +47,7 @@ from bpy.types import Operator, PropertyGroup, Mesh, Panel
 from bpy.props import FloatProperty, CollectionProperty, BoolProperty, IntProperty, EnumProperty
 from mathutils import Vector
 from random import uniform
+from math import radians, cos, sin
 from .bmesh_utils import BmeshEdit
 from .simple_manipulator import Manipulable
 
@@ -95,14 +97,14 @@ class archipack_floor(Manipulable, PropertyGroup):
         min=2*FOOT, soft_max=100*FOOT,
         default=20*FOOT, precision=2,
         description='Width', update=update,
-        unit="LENGTH"
+        subtype="DISTANCE"
     )
     length = FloatProperty(  # y
         name='length',
         min=2*FOOT, soft_max=100*FOOT,
         default=8*FOOT, precision=2,
         description='Length', update=update,
-        unit="LENGTH"
+        subtype="DISTANCE"
     )
 
     # generic spacing
@@ -118,7 +120,7 @@ class archipack_floor(Manipulable, PropertyGroup):
         min=0.25*INCH, soft_max=2*INCH,
         default=1*INCH, precision=2,
         description='Thickness', update=update,
-        unit="LENGTH"
+        subtype="DISTANCE"
     )
     vary_thickness = BoolProperty(
         name='vary thickness', update=update, default=False,
@@ -155,6 +157,11 @@ class archipack_floor(Manipulable, PropertyGroup):
     board_length = FloatProperty(
         name='board length', unit='LENGTH', min=2*FOOT,
         soft_max=100*FOOT, default=8*FOOT, update=update,
+        description='The length of the boards', precision=2
+    )
+    short_board_length = FloatProperty(
+        name='board length', unit='LENGTH', min=6*INCH,
+        soft_max=4*FOOT, default=2*FOOT, update=update,
         description='The length of the boards', precision=2
     )
     vary_length = BoolProperty(
@@ -220,6 +227,21 @@ class archipack_floor(Manipulable, PropertyGroup):
         for i in add:
             v_list.append(i)
 
+    @staticmethod
+    def line_from_points(pt1, pt2):
+        m = (pt2[1] - pt1[1]) / (pt2[0] - pt1[0])
+        b = pt2[1] - (m * pt2[0])
+
+        return lambda x: m * x + b
+
+    def add_cube_faces(self):
+        p = len(self.vs) - 8
+        self.append_all(self.fs, [(p, p + 2, p + 3, p + 1), (p + 2, p + 6, p + 7, p + 3), (p + 1, p + 3, p + 7, p + 5),
+                                  (p + 6, p + 4, p + 5, p + 7), (p, p + 1, p + 5, p + 4), (p, p + 4, p + 6, p + 2)])
+
+    def add_cube_mat_ids(self, mat_id=0):
+        self.append_all(self.ms, [mat_id]*6)
+
     def add_cube(self, x, y, z, w, l, t, clip=True, mat_id=0):
         """
         Adds vertices, faces, and material ids for a cube, makes it easy since this shape is added so much
@@ -232,8 +254,6 @@ class archipack_floor(Manipulable, PropertyGroup):
         :param clip: trim back mesh to be within length and width
         :param mat_id: material id to use for the six faces        
         """
-        p = len(self.vs)
-
         # if starting point is greater than bounds, don't even bother
         if clip and (x >= self.width or y >= self.length):
             return
@@ -245,9 +265,18 @@ class archipack_floor(Manipulable, PropertyGroup):
 
         self.append_all(self.vs, [(x, y, z), (x, y, z + t), (x + w, y, z), (x + w, y, z + t), (x, y + l, z),
                                   (x, y + l, z + t), (x + w, y + l, z), (x + w, y + l, z + t)])
-        self.append_all(self.fs, [(p, p + 2, p + 3, p + 1), (p + 2, p + 6, p + 7, p + 3), (p + 1, p + 3, p + 7, p + 5),
-                                  (p + 6, p + 4, p + 5, p + 7), (p, p + 1, p + 5, p + 4), (p, p + 4, p + 6, p + 2)])
-        self.append_all(self.ms, [mat_id for i in range(6)])
+        self.add_cube_faces()
+        self.add_cube_mat_ids(mat_id)
+
+    def trim_herringbone_length(self):
+        p = len(self.vs) - 8
+
+        # trim x on points
+        self.vs[p + 2][0], self.vs[p + 3][0], self.vs[p + 6][0], self.vs[p + 7][0] = [self.width]*4
+
+        # trim y points
+        self.vs[p + 2][1], self.vs[p + 3][1] = [self.line_from_points(self.vs[p + 1], self.vs[p + 3])(self.width)]*2
+        self.vs[p + 6][1], self.vs[p + 7][1] = [self.line_from_points(self.vs[p + 5], self.vs[p + 7])(self.width)]*2
 
     def tile_grout(self):
         z = self.thickness - self.mortar_depth
@@ -513,7 +542,7 @@ class archipack_floor(Manipulable, PropertyGroup):
                             self.append_all(self.fs, [(p, p + 3, p + 2, p + 1), (p + 4, p + 5, p + 6, p + 7),
                                                       (p, p + 4, p + 7, p + 3), (p + 3, p + 7, p + 6, p + 2),
                                                       (p + 1, p + 2, p + 6, p + 5), (p, p + 1, p + 5, p + 4)])
-                            self.append_all(self.ms, [0 for i in range(6)])
+                            self.append_all(self.ms, [0]*6)
 
                     cur_x = start_x
                     cur_y += bl2 + self.spacing
@@ -538,7 +567,7 @@ class archipack_floor(Manipulable, PropertyGroup):
                             self.append_all(self.fs, [(p, p + 3, p + 2, p + 1), (p + 4, p + 5, p + 6, p + 7),
                                                       (p, p + 4, p + 7, p + 3), (p + 3, p + 7, p + 6, p + 2),
                                                       (p + 1, p + 2, p + 6, p + 5), (p, p + 1, p + 5, p + 4)])
-                            self.append_all(self.ms, [0 for i in range(6)])
+                            self.append_all(self.ms, [0]*6)
 
                 orient_length = not orient_length
 
@@ -546,7 +575,46 @@ class archipack_floor(Manipulable, PropertyGroup):
             cur_x += bl + self.spacing
 
     def wood_herringbone(self):
-        pass
+        th = self.thickness
+        sp = self.spacing
+
+        width_dif = self.board_width / cos(radians(45))
+        x_dif = self.short_board_length * cos(radians(45))
+        y_dif = self.short_board_length * sin(radians(45))
+        total_y_dif = width_dif + y_dif
+
+        cur_y = 0
+        while cur_y < self.length:
+            cur_x = 0
+
+            while cur_x < self.width:
+                # left side
+                self.append_all(self.vs, [[cur_x, cur_y, 0], [cur_x, cur_y, th], [cur_x + x_dif, cur_y + y_dif, 0],
+                                          [cur_x + x_dif, cur_y + y_dif, th], [cur_x, cur_y + width_dif, 0],
+                                          [cur_x, cur_y + width_dif, th], [cur_x + x_dif, cur_y + total_y_dif, 0],
+                                          [cur_x + x_dif, cur_y + total_y_dif, th]])
+                cur_x += x_dif + sp
+
+                if cur_x > self.width:  # went to far
+                    self.trim_herringbone_length()
+
+                self.add_cube_faces()
+                self.add_cube_mat_ids()
+
+                # right side
+                self.append_all(self.vs, [[cur_x, cur_y + y_dif, 0], [cur_x, cur_y + y_dif, th],
+                                          [cur_x + x_dif, cur_y, 0], [cur_x + x_dif, cur_y, th],
+                                          [cur_x, cur_y + total_y_dif, 0], [cur_x, cur_y + total_y_dif, th],
+                                          [cur_x + x_dif, cur_y + width_dif, 0], [cur_x + x_dif, cur_y+width_dif, th]])
+                cur_x += x_dif + sp
+
+                if cur_x > self.width:  # went to far
+                    self.trim_herringbone_length()
+
+                self.add_cube_faces()
+                self.add_cube_mat_ids()
+
+            cur_y += width_dif + sp / cos(radians(45))  # adjust spacing amount for 45 degree angle
 
     def wood_herringbone_parquet(self):
         pass
@@ -624,20 +692,19 @@ class archipack_floor(Manipulable, PropertyGroup):
         # setup 3d points for gl manipulators
         self.manipulators[0].set_pts([(0, 0, 0), (self.width, 0, 0), (0.5, 0, 0)])
         self.manipulators[1].set_pts([(0, 0, 0), (0, self.length, 0), (-0.5, 0, 0)])
-        self.manipulators[2].set_pts([(0, 0, 0), (0, 0, self.thickness), (-0.5, 0, 0)])
 
         if self.floor_material == "wood":
-            self.manipulators[3].prop1_name = "board_length"
-            self.manipulators[3].set_pts([(0, 0, 0), (0, self.board_length, 0), (-0.2, 0, 0)])
+            self.manipulators[2].prop1_name = "board_length"
+            self.manipulators[2].set_pts([(0, 0, 0), (0, self.board_length, 0), (-0.2, 0, 0)])
 
-            self.manipulators[4].prop1_name = "board_width"
-            self.manipulators[4].set_pts([(0, 0, self.thickness), (self.board_width, 0, self.thickness), (-0.2, 0, 0)])
+            self.manipulators[3].prop1_name = "board_width"
+            self.manipulators[3].set_pts([(0, 0, self.thickness), (self.board_width, 0, self.thickness), (-0.2, 0, 0)])
         else:
-            self.manipulators[3].prop1_name = "tile_length"
-            self.manipulators[3].set_pts([(0, 0, 0), (0, self.tile_length, 0), (-0.2, 0, 0)])
+            self.manipulators[2].prop1_name = "tile_length"
+            self.manipulators[2].set_pts([(0, 0, 0), (0, self.tile_length, 0), (-0.2, 0, 0)])
 
-            self.manipulators[4].prop1_name = "tile_width"
-            self.manipulators[4].set_pts([(0, 0, self.thickness), (self.tile_width, 0, self.thickness), (-0.2, 0, 0)])
+            self.manipulators[3].prop1_name = "tile_width"
+            self.manipulators[3].set_pts([(0, 0, self.thickness), (self.tile_width, 0, self.thickness), (-0.2, 0, 0)])
 
         # restore context
         old.select = True
@@ -726,11 +793,9 @@ class ARCHIPACK_OT_floor(Operator):
         s = d.manipulators.add()
         s.prop1_name = "length"
 
-        s = d.manipulators.add()
-        s.normal = Vector((0, 1, 0))
-        s.prop1_name = "thickness"
-
-        # start as wood, but will be changed if they need to be tile
+        # these will be used for length and width respectively, but the property they link to will change based
+        # on whether the floor material is tile or wood, whether we are using short_board_length or the normal, etc.
+        # these are changed in archipack_floor.update()
         s = d.manipulators.add()
         s.prop1_name = "board_length"
 

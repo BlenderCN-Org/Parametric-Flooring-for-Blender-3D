@@ -228,11 +228,14 @@ class archipack_floor(Manipulable, PropertyGroup):
             v_list.append(i)
 
     @staticmethod
-    def line_from_points(pt1, pt2):
+    def line_from_points(pt1, pt2, in_terms_of_x=True):
         m = (pt2[1] - pt1[1]) / (pt2[0] - pt1[0])
         b = pt2[1] - (m * pt2[0])
 
-        return lambda x: m * x + b
+        if in_terms_of_x:
+            return lambda x: m * x + b
+        else:
+            return lambda y: (y - b) / m
 
     def add_cube_faces(self):
         p = len(self.vs) - 8
@@ -268,15 +271,57 @@ class archipack_floor(Manipulable, PropertyGroup):
         self.add_cube_faces()
         self.add_cube_mat_ids(mat_id)
 
-    def trim_herringbone_length(self):
+    def trim_herringbone_width(self):
         p = len(self.vs) - 8
-
-        # trim x on points
-        self.vs[p + 2][0], self.vs[p + 3][0], self.vs[p + 6][0], self.vs[p + 7][0] = [self.width]*4
 
         # trim y points
         self.vs[p + 2][1], self.vs[p + 3][1] = [self.line_from_points(self.vs[p + 1], self.vs[p + 3])(self.width)]*2
         self.vs[p + 6][1], self.vs[p + 7][1] = [self.line_from_points(self.vs[p + 5], self.vs[p + 7])(self.width)]*2
+
+        # trim x on points
+        self.vs[p + 2][0], self.vs[p + 3][0], self.vs[p + 6][0], self.vs[p + 7][0] = [self.width] * 4
+
+    def trim_herringbone_length(self, trim_right=True):
+        p = len(self.vs) - 8
+
+        if trim_right:
+            # trim right bottom
+            if self.vs[p + 2][1] > self.length:
+                x = self.line_from_points(self.vs[p+1], self.vs[p+3], False)(self.length)
+                self.vs[p+2][0], self.vs[p+3][0] = [x if x > 0 else 0]*2
+                self.vs[p + 2][1], self.vs[p + 3][1] = self.length, self.length
+
+            # trim right top
+            if self.vs[p + 6][1] > self.length:
+                x = self.line_from_points(self.vs[p+5], self.vs[p+7], False)(self.length)
+                self.vs[p+6][0], self.vs[p+7][0] = [x if x > 0 else 0]*2
+                self.vs[p + 6][1], self.vs[p + 7][1] = self.length, self.length
+
+            # trim left top
+            if self.vs[p+4][1] > self.length:
+                self.vs[p+4][1], self.vs[p+5][1] = self.length, self.length
+
+            if self.vs[p+6][0] < self.vs[p][0]:
+                self.vs[p+6][0], self.vs[p+7][0] = self.vs[p][0], self.vs[p][0]
+        else:
+            # trim left bottom
+            if self.vs[p][1] > self.length:
+                x = self.line_from_points(self.vs[p + 1], self.vs[p + 3], False)(self.length)
+                self.vs[p][0], self.vs[p + 1][0] = [x if x > 0 else 0] * 2
+                self.vs[p][1], self.vs[p + 1][1] = self.length, self.length
+
+            # trim left top
+            if self.vs[p + 4][1] > self.length:
+                x = self.line_from_points(self.vs[p + 5], self.vs[p + 7], False)(self.length)
+                self.vs[p + 4][0], self.vs[p + 5][0] = [x if x > 0 else 0] * 2
+                self.vs[p + 4][1], self.vs[p + 5][1] = self.length, self.length
+
+            # trim right top
+            if self.vs[p + 6][1] > self.length:  # make sure top left is further left than bottom left
+                self.vs[p + 6][1], self.vs[p + 7][1] = self.length, self.length
+
+            if self.vs[p+4][0] > self.vs[p+2][0]:
+                self.vs[p+4][0], self.vs[p+5][0] = self.vs[p+2][0], self.vs[p+2][0]
 
     def tile_grout(self):
         z = self.thickness - self.mortar_depth
@@ -595,24 +640,28 @@ class archipack_floor(Manipulable, PropertyGroup):
                                           [cur_x + x_dif, cur_y + total_y_dif, th]])
                 cur_x += x_dif + sp
 
-                if cur_x > self.width:  # went to far
-                    self.trim_herringbone_length()
+                if cur_x > self.width:  # went to far right
+                    self.trim_herringbone_width()
+                self.trim_herringbone_length()
 
                 self.add_cube_faces()
                 self.add_cube_mat_ids()
 
                 # right side
-                self.append_all(self.vs, [[cur_x, cur_y + y_dif, 0], [cur_x, cur_y + y_dif, th],
-                                          [cur_x + x_dif, cur_y, 0], [cur_x + x_dif, cur_y, th],
-                                          [cur_x, cur_y + total_y_dif, 0], [cur_x, cur_y + total_y_dif, th],
-                                          [cur_x + x_dif, cur_y + width_dif, 0], [cur_x + x_dif, cur_y+width_dif, th]])
-                cur_x += x_dif + sp
+                if cur_x < self.width:
+                    self.append_all(self.vs, [[cur_x, cur_y + y_dif, 0], [cur_x, cur_y + y_dif, th],
+                                              [cur_x + x_dif, cur_y, 0], [cur_x + x_dif, cur_y, th],
+                                              [cur_x, cur_y + total_y_dif, 0], [cur_x, cur_y + total_y_dif, th],
+                                              [cur_x + x_dif, cur_y + width_dif, 0],
+                                              [cur_x + x_dif, cur_y+width_dif, th]])
+                    cur_x += x_dif + sp
 
-                if cur_x > self.width:  # went to far
-                    self.trim_herringbone_length()
+                    if cur_x > self.width:  # went to far right
+                        self.trim_herringbone_width()
+                    self.trim_herringbone_length(trim_right=False)
 
-                self.add_cube_faces()
-                self.add_cube_mat_ids()
+                    self.add_cube_faces()
+                    self.add_cube_mat_ids()
 
             cur_y += width_dif + sp / cos(radians(45))  # adjust spacing amount for 45 degree angle
 

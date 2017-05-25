@@ -45,7 +45,7 @@ bl_info = {
 import bpy
 from bpy.types import Operator, PropertyGroup, Mesh, Panel
 from bpy.props import FloatProperty, CollectionProperty, BoolProperty, IntProperty, EnumProperty
-from mathutils import Vector
+import mathutils
 from random import uniform
 from math import radians, cos, sin
 from .bmesh_utils import BmeshEdit
@@ -228,14 +228,12 @@ class archipack_floor(Manipulable, PropertyGroup):
             v_list.append(i)
 
     @staticmethod
-    def line_from_points(pt1, pt2, in_terms_of_x=True):
-        m = (pt2[1] - pt1[1]) / (pt2[0] - pt1[0])
-        b = pt2[1] - (m * pt2[0])
+    def round_tuple(tup):
+        return [round(i, 4) for i in tup]
 
-        if in_terms_of_x:
-            return lambda x: m * x + b
-        else:
-            return lambda y: (y - b) / m
+    @staticmethod
+    def round_2d_list(li):
+        return [archipack_floor.round_tuple(i) for i in li]
 
     def add_cube_faces(self):
         p = len(self.vs) - 8
@@ -271,57 +269,69 @@ class archipack_floor(Manipulable, PropertyGroup):
         self.add_cube_faces()
         self.add_cube_mat_ids(mat_id)
 
-    def trim_herringbone_width(self):
-        p = len(self.vs) - 8
+    @staticmethod
+    def corner_points_from_boundary(segments, shape) -> list:
+        """
+        Take segments and intersect them to find corner points of object.
+        :param segments: The segments that form that boundaries, [[start_v, end_v], [start_v, end_v]...]
+        :param shape: The corner vertices to make sure the points found by intersecting the lines are inside the object,
+        [corner_v, corner_v2...]
+        :return: The points that form the corners of the object [corner_v, corner_v2...]
+        """
+        out = []
+        shape = archipack_floor.round_2d_list(shape)
+        print(shape)
 
-        # trim y points
-        self.vs[p + 2][1], self.vs[p + 3][1] = [self.line_from_points(self.vs[p + 1], self.vs[p + 3])(self.width)]*2
-        self.vs[p + 6][1], self.vs[p + 7][1] = [self.line_from_points(self.vs[p + 5], self.vs[p + 7])(self.width)]*2
+        for i in range(0, len(segments) - 1):
+            for j in range(i + 1, len(segments)):
+                point = mathutils.geometry.intersect_line_line_2d(segments[i][0], segments[i][1], segments[j][0],
+                                                                  segments[j][1])
+                if point is not None:
+                    r_point = archipack_floor.round_tuple(tuple(point))
 
-        # trim x on points
-        self.vs[p + 2][0], self.vs[p + 3][0], self.vs[p + 6][0], self.vs[p + 7][0] = [self.width] * 4
+                    if r_point not in out and archipack_floor.point_in_shape(r_point, shape):
+                        out.append(r_point)
 
-    def trim_herringbone_length(self, trim_right=True):
-        p = len(self.vs) - 8
+        return out
 
-        if trim_right:
-            # trim right bottom
-            if self.vs[p + 2][1] > self.length:
-                x = self.line_from_points(self.vs[p+1], self.vs[p+3], False)(self.length)
-                self.vs[p+2][0], self.vs[p+3][0] = [x if x > 0 else 0]*2
-                self.vs[p + 2][1], self.vs[p + 3][1] = self.length, self.length
+    @staticmethod
+    def point_in_shape(point, shape) -> bool:
+        """
+        Find if the point is in the shape, do this by splitting into a series of triangles and testing if point is
+        in that triangle
+        :param point: An (x, y) tuple with the point to check
+        :param shape: The corner vertices that make up that shape [corner_v, corner_v2...]
+        :return: Whether or not the point is in the shape
+        """
+        p1 = shape[0]
+        for i in range(1, len(shape) - 1):
+            if mathutils.geometry.intersect_point_tri_2d(point, p1, shape[i], shape[i + 1]) == 1:
+                return True
 
-            # trim right top
-            if self.vs[p + 6][1] > self.length:
-                x = self.line_from_points(self.vs[p+5], self.vs[p+7], False)(self.length)
-                self.vs[p+6][0], self.vs[p+7][0] = [x if x > 0 else 0]*2
-                self.vs[p + 6][1], self.vs[p + 7][1] = self.length, self.length
+        return False
 
-            # trim left top
-            if self.vs[p+4][1] > self.length:
-                self.vs[p+4][1], self.vs[p+5][1] = self.length, self.length
+    def add_shape_from_corner_points(self, points, th, mat_id=0):
+        p = len(self.vs)
 
-            if self.vs[p+6][0] < self.vs[p][0]:
-                self.vs[p+6][0], self.vs[p+7][0] = self.vs[p][0], self.vs[p][0]
-        else:
-            # trim left bottom
-            if self.vs[p][1] > self.length:
-                x = self.line_from_points(self.vs[p + 1], self.vs[p + 3], False)(self.length)
-                self.vs[p][0], self.vs[p + 1][0] = [x if x > 0 else 0] * 2
-                self.vs[p][1], self.vs[p + 1][1] = self.length, self.length
+        # add vertices
+        for pt in points:
+            self.vs.append((pt[0], pt[1], 0))
+            self.vs.append((pt[0], pt[1], th))
 
-            # trim left top
-            if self.vs[p + 4][1] > self.length:
-                x = self.line_from_points(self.vs[p + 5], self.vs[p + 7], False)(self.length)
-                self.vs[p + 4][0], self.vs[p + 5][0] = [x if x > 0 else 0] * 2
-                self.vs[p + 4][1], self.vs[p + 5][1] = self.length, self.length
+        for i in range(len(points) - 1):
+            self.fs.append((p, p + 2, p + 3, p + 1))
+            p += 2
 
-            # trim right top
-            if self.vs[p + 6][1] > self.length:  # make sure top left is further left than bottom left
-                self.vs[p + 6][1], self.vs[p + 7][1] = self.length, self.length
+    # TODO: add way to make sure corners get ordered in counter-clockwise manner
+    @staticmethod
+    def sort_corner_points(points):
+        """
+        
+        :param points: 
+        :return: 
+        """
 
-            if self.vs[p+4][0] > self.vs[p+2][0]:
-                self.vs[p+4][0], self.vs[p+5][0] = self.vs[p+2][0], self.vs[p+2][0]
+        return points
 
     def tile_grout(self):
         z = self.thickness - self.mortar_depth
@@ -622,6 +632,8 @@ class archipack_floor(Manipulable, PropertyGroup):
     def wood_herringbone(self):
         th = self.thickness
         sp = self.spacing
+        boundaries = [[(0, 0), (0, self.length)], [(0, 0), (self.width, 0)],
+                      [(self.width, 0), (self.width, self.length)], [(self.width, self.length), (0, self.length)]]
 
         width_dif = self.board_width / cos(radians(45))
         x_dif = self.short_board_length * cos(radians(45))
@@ -633,35 +645,30 @@ class archipack_floor(Manipulable, PropertyGroup):
             cur_x = 0
 
             while cur_x < self.width:
-                # left side
-                self.append_all(self.vs, [[cur_x, cur_y, 0], [cur_x, cur_y, th], [cur_x + x_dif, cur_y + y_dif, 0],
-                                          [cur_x + x_dif, cur_y + y_dif, th], [cur_x, cur_y + width_dif, 0],
-                                          [cur_x, cur_y + width_dif, th], [cur_x + x_dif, cur_y + total_y_dif, 0],
-                                          [cur_x + x_dif, cur_y + total_y_dif, th]])
+                print("---------")
+                l_corners = self.corner_points_from_boundary(
+                    boundaries + [[(cur_x, cur_y), (cur_x + x_dif, cur_y + y_dif)],
+                                  [(cur_x + x_dif, cur_y + y_dif), (cur_x + x_dif, cur_y + total_y_dif)],
+                                  [(cur_x + x_dif, cur_y + total_y_dif), (cur_x, cur_y + width_dif)],
+                                  [(cur_x, cur_y + width_dif), (cur_x, cur_y)]],
+                    [(cur_x, cur_y), (cur_x + x_dif, cur_y + y_dif), (cur_x + x_dif, cur_y + total_y_dif),
+                     (cur_x, cur_y + width_dif)])
+
+                self.add_shape_from_corner_points(l_corners, self.thickness)
+                return
                 cur_x += x_dif + sp
 
-                if cur_x > self.width:  # went to far right
-                    self.trim_herringbone_width()
-                self.trim_herringbone_length()
-
-                self.add_cube_faces()
-                self.add_cube_mat_ids()
-
-                # right side
-                if cur_x < self.width:
-                    self.append_all(self.vs, [[cur_x, cur_y + y_dif, 0], [cur_x, cur_y + y_dif, th],
-                                              [cur_x + x_dif, cur_y, 0], [cur_x + x_dif, cur_y, th],
-                                              [cur_x, cur_y + total_y_dif, 0], [cur_x, cur_y + total_y_dif, th],
-                                              [cur_x + x_dif, cur_y + width_dif, 0],
-                                              [cur_x + x_dif, cur_y+width_dif, th]])
-                    cur_x += x_dif + sp
-
-                    if cur_x > self.width:  # went to far right
-                        self.trim_herringbone_width()
-                    self.trim_herringbone_length(trim_right=False)
-
-                    self.add_cube_faces()
-                    self.add_cube_mat_ids()
+                # # right side
+                # if cur_x < self.width:
+                #     self.append_all(self.vs, [[cur_x, cur_y + y_dif, 0], [cur_x, cur_y + y_dif, th],
+                #                               [cur_x + x_dif, cur_y, 0], [cur_x + x_dif, cur_y, th],
+                #                               [cur_x, cur_y + total_y_dif, 0], [cur_x, cur_y + total_y_dif, th],
+                #                               [cur_x + x_dif, cur_y + width_dif, 0],
+                #                               [cur_x + x_dif, cur_y+width_dif, th]])
+                #     cur_x += x_dif + sp
+                #
+                #     self.add_cube_faces()
+                #     self.add_cube_mat_ids()
 
             cur_y += width_dif + sp / cos(radians(45))  # adjust spacing amount for 45 degree angle
 

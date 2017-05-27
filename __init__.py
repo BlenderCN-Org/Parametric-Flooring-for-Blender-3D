@@ -47,7 +47,7 @@ from bpy.types import Operator, PropertyGroup, Mesh, Panel
 from bpy.props import FloatProperty, CollectionProperty, BoolProperty, IntProperty, EnumProperty
 import mathutils
 from random import uniform
-from math import radians, cos, sin
+from math import radians, cos, sin, atan
 from .bmesh_utils import BmeshEdit
 from .simple_manipulator import Manipulable
 
@@ -269,8 +269,7 @@ class archipack_floor(Manipulable, PropertyGroup):
         self.add_cube_faces()
         self.add_cube_mat_ids(mat_id)
 
-    @staticmethod
-    def corner_points_from_boundary(segments, shape) -> list:
+    def corner_points_from_boundary(self, segments, shape) -> list:
         """
         Take segments and intersect them to find corner points of object.
         :param segments: The segments that form that boundaries, [[start_v, end_v], [start_v, end_v]...]
@@ -280,7 +279,6 @@ class archipack_floor(Manipulable, PropertyGroup):
         """
         out = []
         shape = archipack_floor.round_2d_list(shape)
-        print(shape)
 
         for i in range(0, len(segments) - 1):
             for j in range(i + 1, len(segments)):
@@ -289,13 +287,11 @@ class archipack_floor(Manipulable, PropertyGroup):
                 if point is not None:
                     r_point = archipack_floor.round_tuple(tuple(point))
 
-                    if r_point not in out and archipack_floor.point_in_shape(r_point, shape):
+                    if r_point not in out and self.point_in_shape(r_point, shape):
                         out.append(r_point)
-
         return out
 
-    @staticmethod
-    def point_in_shape(point, shape) -> bool:
+    def point_in_shape(self, point, shape) -> bool:
         """
         Find if the point is in the shape, do this by splitting into a series of triangles and testing if point is
         in that triangle
@@ -305,33 +301,80 @@ class archipack_floor(Manipulable, PropertyGroup):
         """
         p1 = shape[0]
         for i in range(1, len(shape) - 1):
-            if mathutils.geometry.intersect_point_tri_2d(point, p1, shape[i], shape[i + 1]) == 1:
-                return True
+            if mathutils.geometry.intersect_point_tri_2d(point, p1, shape[i], shape[i + 1]) == 1:  # inside board
+                if 0 <= point[0] <= self.width and 0 <= point[1] <= self.length:  # inside outer bounds
+                    return True
 
         return False
 
     def add_shape_from_corner_points(self, points, th, mat_id=0):
-        p = len(self.vs)
+        points = archipack_floor.sort_corner_points(points)
 
+        p = len(self.vs)
         # add vertices
         for pt in points:
             self.vs.append((pt[0], pt[1], 0))
             self.vs.append((pt[0], pt[1], th))
 
+        # add faces
+        start_p = p
+        top_face = []
+        bottom_face = []
+
         for i in range(len(points) - 1):
-            self.fs.append((p, p + 2, p + 3, p + 1))
+            # self.fs.append((p, p + 2, p + 3, p + 1))
+            top_face.append(p)
+            bottom_face.append(p + 1)
             p += 2
 
-    # TODO: add way to make sure corners get ordered in counter-clockwise manner
+        # add last two vertices
+        top_face.append(p)
+        bottom_face.append(p + 1)
+
+        # final side face
+        # self.fs.append((p, start_p, start_p + 1, p + 1))
+        # top_face.reverse()  # reverse to get normals right
+        # self.fs.append(top_face)
+        # self.fs.append(bottom_face)
+
+    def board_from_boundary_lines(self, segments, shape, th, mat_id=0):
+        corners = self.corner_points_from_boundary(segments, shape)
+        self.add_shape_from_corner_points(corners, th, mat_id)
+
     @staticmethod
     def sort_corner_points(points):
         """
-        
-        :param points: 
-        :return: 
+        Sort corner points so they are in a counter-clockwise order
+        :param points: The corner points to be sorted
+        :return: the corner points sorted in a counter-clockwise order
         """
+        # find center
+        center = mathutils.Vector((0, 0))
+        for pt in points:
+            center += mathutils.Vector(pt)
+        center /= len(points)
 
-        return points
+        # find angles
+        unsorted = []
+        for pt in points:
+            ang = atan((pt[1] - center[1]) / (pt[0] - center[0]))
+            if pt[0] < center[0]:
+                ang += radians(180)
+            elif pt[1] < center[1]:
+                ang += 360
+
+            unsorted.append([ang, pt])
+
+        # sort angles
+        sorted_ = []
+        for pt in unsorted:
+            i = 0
+            for pos in range(len(sorted_)):
+                if pt[0] > sorted_[pos][0]:
+                    i = pos + 1  # we are bigger than this one, so we need to go in next position
+            sorted_.insert(i, pt)
+
+        return [i[1] for i in sorted_]
 
     def tile_grout(self):
         z = self.thickness - self.mortar_depth
@@ -630,7 +673,6 @@ class archipack_floor(Manipulable, PropertyGroup):
             cur_x += bl + self.spacing
 
     def wood_herringbone(self):
-        th = self.thickness
         sp = self.spacing
         boundaries = [[(0, 0), (0, self.length)], [(0, 0), (self.width, 0)],
                       [(self.width, 0), (self.width, self.length)], [(self.width, self.length), (0, self.length)]]
@@ -645,30 +687,27 @@ class archipack_floor(Manipulable, PropertyGroup):
             cur_x = 0
 
             while cur_x < self.width:
-                print("---------")
-                l_corners = self.corner_points_from_boundary(
+                self.board_from_boundary_lines(
                     boundaries + [[(cur_x, cur_y), (cur_x + x_dif, cur_y + y_dif)],
                                   [(cur_x + x_dif, cur_y + y_dif), (cur_x + x_dif, cur_y + total_y_dif)],
                                   [(cur_x + x_dif, cur_y + total_y_dif), (cur_x, cur_y + width_dif)],
                                   [(cur_x, cur_y + width_dif), (cur_x, cur_y)]],
                     [(cur_x, cur_y), (cur_x + x_dif, cur_y + y_dif), (cur_x + x_dif, cur_y + total_y_dif),
-                     (cur_x, cur_y + width_dif)])
+                     (cur_x, cur_y + width_dif)], self.thickness)
 
-                self.add_shape_from_corner_points(l_corners, self.thickness)
-                return
                 cur_x += x_dif + sp
 
                 # # right side
-                # if cur_x < self.width:
-                #     self.append_all(self.vs, [[cur_x, cur_y + y_dif, 0], [cur_x, cur_y + y_dif, th],
-                #                               [cur_x + x_dif, cur_y, 0], [cur_x + x_dif, cur_y, th],
-                #                               [cur_x, cur_y + total_y_dif, 0], [cur_x, cur_y + total_y_dif, th],
-                #                               [cur_x + x_dif, cur_y + width_dif, 0],
-                #                               [cur_x + x_dif, cur_y+width_dif, th]])
-                #     cur_x += x_dif + sp
-                #
-                #     self.add_cube_faces()
-                #     self.add_cube_mat_ids()
+                if cur_x < self.width:
+                    self.board_from_boundary_lines(
+                        boundaries + [[(cur_x, cur_y + y_dif), (cur_x + x_dif, cur_y)],
+                                      [(cur_x + x_dif, cur_y), (cur_x + x_dif, cur_y + width_dif)],
+                                      [(cur_x + x_dif, cur_y + width_dif), (cur_x, cur_y + total_y_dif)],
+                                      [(cur_x, cur_y + total_y_dif), (cur_x, cur_y + y_dif)]],
+                        [(cur_x, cur_y + y_dif), (cur_x + x_dif, cur_y), (cur_x + x_dif, cur_y + width_dif),
+                         (cur_x, cur_y + total_y_dif)], self.thickness)
+
+                    cur_x += x_dif + sp
 
             cur_y += width_dif + sp / cos(radians(45))  # adjust spacing amount for 45 degree angle
 

@@ -235,6 +235,17 @@ class archipack_floor(Manipulable, PropertyGroup):
         return lambda x: slope * (x - pt1[0]) + pt1[1]
 
     @staticmethod
+    def line_segments_from_points(points):
+        """
+        Create line segments from the points listed
+        :param points: point to form line segments [p1, p2, p3...]
+        :return: line segments [[p1, p2], [p2, p3]...[pn, p1]]
+        """
+        out = [[points[i], points[i + 1]] for i in range(len(points) - 1)]
+        out.append([points[len(points) - 1], points[0]])
+        return out
+
+    @staticmethod
     def points_on_same_side_of_line_segment(pt1, pt2, line_segment) -> bool:
         """
         Check if pt1 and pt2 are on the same side of the line formed by line_segment. Do this by finding the y
@@ -785,40 +796,72 @@ class archipack_floor(Manipulable, PropertyGroup):
             cur_x += bl + self.spacing
 
     def wood_herringbone(self):
-        sp = self.spacing
         width_dif = self.board_width / cos(radians(45))
         x_dif = self.short_board_length * cos(radians(45))
         y_dif = self.short_board_length * sin(radians(45))
         total_y_dif = width_dif + y_dif
+        sp_dif = self.spacing / cos(radians(45))
 
         cur_y = -y_dif
         while cur_y < self.length:
             cur_x = 0
 
             while cur_x < self.width:
-                board = [[(cur_x, cur_y), (cur_x + x_dif, cur_y + y_dif)],
-                         [(cur_x + x_dif, cur_y + y_dif), (cur_x + x_dif, cur_y + total_y_dif)],
-                         [(cur_x + x_dif, cur_y + total_y_dif), (cur_x, cur_y + width_dif)],
-                         [(cur_x, cur_y + width_dif), (cur_x, cur_y)]]
-
                 # left side
+                board = self.line_segments_from_points(
+                    [(cur_x, cur_y), (cur_x + x_dif, cur_y + y_dif),
+                     (cur_x + x_dif, cur_y + total_y_dif), (cur_x, cur_y + width_dif)]
+                )
                 self.create_board_from_boundaries(board, self.thickness)
-                cur_x += x_dif + sp
+                cur_x += x_dif + self.spacing
 
                 # right side
                 if cur_x < self.width:
-                    board = [[(cur_x, cur_y + y_dif), (cur_x + x_dif, cur_y)],
-                             [(cur_x + x_dif, cur_y), (cur_x + x_dif, cur_y + width_dif)],
-                             [(cur_x + x_dif, cur_y + width_dif), (cur_x, cur_y + total_y_dif)],
-                             [(cur_x, cur_y + total_y_dif), (cur_x, cur_y + y_dif)]]
-
+                    board = self.line_segments_from_points(
+                        [(cur_x, cur_y + y_dif), (cur_x + x_dif, cur_y),
+                         (cur_x + x_dif, cur_y + width_dif), (cur_x, cur_y + total_y_dif)]
+                    )
                     self.create_board_from_boundaries(board, self.thickness)
-                    cur_x += x_dif + sp
+                    cur_x += x_dif + self.spacing
 
-            cur_y += width_dif + sp / cos(radians(45))  # adjust spacing amount for 45 degree angle
+            cur_y += width_dif + sp_dif  # adjust spacing amount for 45 degree angle
 
     def wood_herringbone_parquet(self):
-        pass
+        x_dif = self.short_board_length * cos(radians(45))
+        y_dif = self.short_board_length * sin(radians(45))
+        y_dif_45 = self.board_width * cos(radians(45))
+        x_dif_45 = self.board_width * sin(radians(45))
+        total_y_dif = y_dif + y_dif_45
+
+        sp_dif = (self.spacing / cos(radians(45))) / 2  # divide by two since it is used for both x and y
+        width_dif = self.board_width / cos(radians(45))
+
+        cur_y = -y_dif
+        while cur_y - y_dif_45 < self.length:  # continue as long as bottom left corner is still good
+            cur_x = 0
+            pre_y = cur_y
+
+            while cur_x - x_dif_45 < self.width:  # continue as long as top left corner is still good
+                # left side
+                board = self.line_segments_from_points(
+                    [(cur_x, cur_y), (cur_x + x_dif, cur_y + y_dif),
+                     (cur_x + x_dif - x_dif_45, cur_y + total_y_dif), (cur_x - x_dif_45, cur_y + y_dif_45)]
+                )
+                self.create_board_from_boundaries(board, self.thickness)
+                cur_x += x_dif - x_dif_45 + sp_dif
+                cur_y += y_dif - y_dif_45 - sp_dif
+
+                if cur_x < self.width:
+                    board = self.line_segments_from_points(
+                        [(cur_x, cur_y), (cur_x + x_dif, cur_y - y_dif),
+                         (cur_x + x_dif + x_dif_45, cur_y - y_dif + y_dif_45),
+                         (cur_x + x_dif_45, cur_y + y_dif_45)]
+                    )
+                    self.create_board_from_boundaries(board, self.thickness)
+                    cur_x += x_dif + x_dif_45 + sp_dif
+                    cur_y -= y_dif - y_dif_45 - sp_dif
+
+            cur_y = pre_y + width_dif + (2*sp_dif)
 
     def update_data(self):
         # clear data before refreshing it

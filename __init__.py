@@ -277,6 +277,17 @@ class archipack_floor(Manipulable, PropertyGroup):
         return False
 
     @staticmethod
+    def rotate_point(point, pivot, angle, units="DEGREES"):
+        if units == "DEGREES":
+            angle = radians(angle)
+
+        x, y = point[0] - pivot[0], point[1] - pivot[1]
+        new_x = (x * cos(angle)) - (y * sin(angle))
+        new_y = (x * sin(angle)) - (y * cos(angle))
+
+        return new_x + pivot[0], new_y + pivot[1]
+
+    @staticmethod
     def rough_comp(val1, val2, comp: int) -> bool:
         """
         Check if val1 and val2 roughly compare to each other
@@ -646,7 +657,34 @@ class archipack_floor(Manipulable, PropertyGroup):
             row = (row + 1) % 2
 
     def tile_hexagon(self):
-        pass
+        """
+          __  Hexagon tiles
+        /   \
+        \___/ 
+        """
+        th = self.thickness
+        sp = self.spacing
+        width = self.tile_width
+        dia = (width / 2) / cos(radians(30))
+        vertical_spacing = dia * (1 + sin(radians(30))) + (sp * sin(radians(60)))
+        base_points = [self.rotate_point((dia, 0), (0, 0), ang + 30) for ang in range(0, 360, 60)]
+
+        cur_y = 0
+        offset = False
+        while cur_y - width / 2 < self.length:  # place tile as long as bottom is still within bounds
+            if offset:
+                cur_x = width / 2
+            else:
+                cur_x = -sp / 2
+
+            while cur_x - width / 2 < self.width:  # place tile as long as left is still within bounds
+                segments = self.line_segments_from_points([(pt[0] + cur_x, pt[1] + cur_y) for pt in base_points])
+                self.create_board_from_boundaries(segments, th)
+
+                cur_x += width + sp
+
+            cur_y += vertical_spacing
+            offset = not offset
 
     def tile_windmill(self):
         """

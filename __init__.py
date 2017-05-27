@@ -666,7 +666,8 @@ class archipack_floor(Manipulable, PropertyGroup):
         sp = self.spacing
         width = self.tile_width
         dia = (width / 2) / cos(radians(30))
-        vertical_spacing = dia * (1 + sin(radians(30))) + (sp * sin(radians(60)))
+        #               top of current, half way up next,    vertical spacing component
+        vertical_spacing = dia * (1 + sin(radians(30))) + (sp * sin(radians(60)))  # center of one row to next row
         base_points = [self.rotate_point((dia, 0), (0, 0), ang + 30) for ang in range(0, 360, 60)]
 
         cur_y = 0
@@ -926,6 +927,46 @@ class archipack_floor(Manipulable, PropertyGroup):
             elif self.tile_style == "windmill":
                 self.tile_windmill()
 
+    def update_manipulators(self):
+        self.manipulators[0].set_pts([(0, 0, 0), (self.width, 0, 0), (0.5, 0, 0)])
+        self.manipulators[1].set_pts([(0, 0, 0), (0, self.length, 0), (-0.5, 0, 0)])
+
+        if self.floor_material == "wood":
+            self.manipulators[2].prop1_name = "board_length"
+            self.manipulators[2].set_pts([(0, 0, 0), (0, self.board_length, 0), (-0.2, 0, 0)])
+
+            self.manipulators[3].prop1_name = "board_width"
+            self.manipulators[3].set_pts(
+                [(0, 0, self.thickness), (self.board_width, 0, self.thickness), (-0.2, 0, 0)])
+
+            if self.wood_style == "regular":
+                pass
+            elif self.wood_style == "parquet":
+                pass
+            elif self.wood_style == "herringbone":
+                pass
+            elif self.wood_style == "herringbone_parquet":
+                pass
+
+        elif self.floor_material == "tile":
+            self.manipulators[2].prop1_name = "tile_length"
+            self.manipulators[2].set_pts([(0, 0, 0), (0, self.tile_length, 0), (-0.2, 0, 0)])
+
+            self.manipulators[3].prop1_name = "tile_width"
+            self.manipulators[3].set_pts(
+                [(0, 0, self.thickness), (self.tile_width, 0, self.thickness), (-0.2, 0, 0)])
+
+            if self.tile_style == "regular":
+                pass
+            elif self.tile_style == "hopscotch":
+                pass
+            elif self.tile_style == "stepping_stone":
+                pass
+            elif self.tile_style == "hexagon":
+                pass
+            elif self.tile_style == "windmill":
+                pass
+
     @property
     def verts(self):
         """
@@ -968,22 +1009,8 @@ class archipack_floor(Manipulable, PropertyGroup):
         self.update_data()  # update vertices and faces
         BmeshEdit.buildmesh(context, o, self.verts, self.faces)  # , matids=self.matids, uvs=self.uvs)
 
-        # setup 3d points for gl manipulators
-        self.manipulators[0].set_pts([(0, 0, 0), (self.width, 0, 0), (0.5, 0, 0)])
-        self.manipulators[1].set_pts([(0, 0, 0), (0, self.length, 0), (-0.5, 0, 0)])
-
-        if self.floor_material == "wood":
-            self.manipulators[2].prop1_name = "board_length"
-            self.manipulators[2].set_pts([(0, 0, 0), (0, self.board_length, 0), (-0.2, 0, 0)])
-
-            self.manipulators[3].prop1_name = "board_width"
-            self.manipulators[3].set_pts([(0, 0, self.thickness), (self.board_width, 0, self.thickness), (-0.2, 0, 0)])
-        else:
-            self.manipulators[2].prop1_name = "tile_length"
-            self.manipulators[2].set_pts([(0, 0, 0), (0, self.tile_length, 0), (-0.2, 0, 0)])
-
-            self.manipulators[3].prop1_name = "tile_width"
-            self.manipulators[3].set_pts([(0, 0, self.thickness), (self.tile_width, 0, self.thickness), (-0.2, 0, 0)])
+        # update manipulators
+        self.update_manipulators()
 
         # restore context
         old.select = True

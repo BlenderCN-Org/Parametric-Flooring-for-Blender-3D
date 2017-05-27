@@ -79,7 +79,7 @@ class archipack_floor(Manipulable, PropertyGroup):
         default="wood", description="Type of material the floor is made of", update=update
     )
     wood_style = EnumProperty(
-        name='wood style', items=(("regular", "Regular", ""), ("parquet", "Parquet", ""),
+        name='wood style', items=(("regular", "Regular", ""), ("square_parquet", "Square Parquet", ""),
                                   ("herringbone_parquet", "Herringbone Parquet", ""),
                                   ("herringbone", "Herringbone", "")), default="regular",
         description="Style of wood floor", update=update
@@ -398,6 +398,11 @@ class archipack_floor(Manipulable, PropertyGroup):
     def add_cube_mat_ids(self, mat_id=0):
         self.append_all(self.ms, [mat_id]*6)
 
+    def add_manipulator(self, name, pt1, pt2, pt3):
+        m = self.manipulators.add()
+        m.prop1_name = name
+        m.set_pts([pt1, pt2, pt3])
+
     def add_shape_from_corner_points(self, points, th, mat_id=0):
         """
         Take corner point data and produce a mesh. Corner points will be sorted so that they are in order.
@@ -656,6 +661,7 @@ class archipack_floor(Manipulable, PropertyGroup):
 
             row = (row + 1) % 2
 
+    # TODO: fix face issue that only occurs sometimes
     def tile_hexagon(self):
         """
           __  Hexagon tiles
@@ -756,75 +762,41 @@ class archipack_floor(Manipulable, PropertyGroup):
 
             cur_x += bw2 + self.width_spacing
 
-    def wood_parquet(self):
+    def wood_square_parquet(self):
         """
         ||--||-- Alternating groups oriented either horizontally, or forwards and backwards.
         ||--||-- self.spacing is used because it is the same spacing for width and length
-        --||--||
+        --||--|| Board width is calculated using number of boards and the length.
         --||--||
         """
         cur_x = 0.0
         z = self.thickness
         start_orient_length = True
 
-        # figure board length
-        bl = (self.board_width * self.boards_in_group) + (self.spacing * (self.boards_in_group - 1))
+        # figure board width
+        bl = self.short_board_length
+        bw = (bl - (self.boards_in_group - 1) * self.spacing) / self.boards_in_group
         while cur_x < self.width:
             cur_y = 0.0
             orient_length = start_orient_length
             while cur_y < self.length:
-                bl2 = bl
-                bw2 = self.board_width
 
                 if orient_length:
                     start_x = cur_x
 
                     for i in range(self.boards_in_group):
                         if cur_x < self.width and cur_y < self.length:
-                            # make sure board should be placed
-                            if cur_x < self.width < cur_x + self.board_width:
-                                bw2 = self.width - cur_x
-                            if cur_y < self.length < cur_y + bl:
-                                bl2 = self.length - cur_y
-                            p = len(self.vs)
-
-                            self.append_all(self.vs, [(cur_x, cur_y, 0.0), (cur_x, cur_y, z), (cur_x + bw2, cur_y, z),
-                                                      (cur_x + bw2, cur_y, 0.0)])
-                            cur_y += bl2
-                            self.append_all(self.vs, [(cur_x, cur_y, 0.0), (cur_x, cur_y, z), (cur_x + bw2, cur_y, z),
-                                                      (cur_x + bw2, cur_y, 0.0)])
-                            cur_y -= bl2
-                            cur_x += bw2 + self.spacing
-
-                            self.append_all(self.fs, [(p, p + 3, p + 2, p + 1), (p + 4, p + 5, p + 6, p + 7),
-                                                      (p, p + 4, p + 7, p + 3), (p + 3, p + 7, p + 6, p + 2),
-                                                      (p + 1, p + 2, p + 6, p + 5), (p, p + 1, p + 5, p + 4)])
-                            self.append_all(self.ms, [0]*6)
+                            self.add_cube(cur_x, cur_y, 0, bw, bl, z)
+                            cur_x += bw + self.spacing
 
                     cur_x = start_x
-                    cur_y += bl2 + self.spacing
+                    cur_y += bl + self.spacing
 
                 else:
                     for i in range(self.boards_in_group):
                         if cur_x < self.width and cur_y < self.length:
-                            if cur_x < self.width < cur_x + bl:
-                                bl2 = self.width - cur_x
-                            if cur_y < self.length < cur_y + self.board_width:
-                                bw2 = self.length - cur_y
-                            p = len(self.vs)
-
-                            self.append_all(self.vs, [(cur_x, cur_y + bw2, 0.0), (cur_x, cur_y + bw2, z),
-                                                      (cur_x, cur_y, z), (cur_x, cur_y, 0.0)])
-                            cur_x += bl2
-                            self.append_all(self.vs, [(cur_x, cur_y + bw2, 0.0), (cur_x, cur_y + bw2, z),
-                                                      (cur_x, cur_y, z), (cur_x, cur_y, 0.0)])
-                            cur_x -= bl2
-                            cur_y += bw2 + self.spacing
-
-                            self.append_all(self.fs, [(p, p + 3, p + 2, p + 1), (p + 4, p + 5, p + 6, p + 7),
-                                                      (p, p + 4, p + 7, p + 3), (p + 3, p + 7, p + 6, p + 2),
-                                                      (p + 1, p + 2, p + 6, p + 5), (p, p + 1, p + 5, p + 4)])
-                            self.append_all(self.ms, [0]*6)
+                            self.add_cube(cur_x, cur_y, 0, bl, bw, z)
+                            cur_y += bw + self.spacing
 
                 orient_length = not orient_length
 
@@ -906,8 +878,8 @@ class archipack_floor(Manipulable, PropertyGroup):
         if self.floor_material == "wood":
             if self.wood_style == "regular":
                 self.wood_regular()
-            elif self.wood_style == "parquet":
-                self.wood_parquet()
+            elif self.wood_style == "square_parquet":
+                self.wood_square_parquet()
             elif self.wood_style == "herringbone":
                 self.wood_herringbone()
             elif self.wood_style == "herringbone_parquet":
@@ -928,44 +900,38 @@ class archipack_floor(Manipulable, PropertyGroup):
                 self.tile_windmill()
 
     def update_manipulators(self):
-        self.manipulators[0].set_pts([(0, 0, 0), (self.width, 0, 0), (0.5, 0, 0)])
-        self.manipulators[1].set_pts([(0, 0, 0), (0, self.length, 0), (-0.5, 0, 0)])
+        self.manipulators.clear()  # clear every time, add new ones
+        self.add_manipulator("length", (0, 0, 0), (0, self.length, 0), (-0.4, 0, 0))
+        self.add_manipulator("width", (0, 0, 0), (self.width, 0, 0), (0.4, 0, 0))
+
+        z = self.thickness
 
         if self.floor_material == "wood":
-            self.manipulators[2].prop1_name = "board_length"
-            self.manipulators[2].set_pts([(0, 0, 0), (0, self.board_length, 0), (-0.2, 0, 0)])
-
-            self.manipulators[3].prop1_name = "board_width"
-            self.manipulators[3].set_pts(
-                [(0, 0, self.thickness), (self.board_width, 0, self.thickness), (-0.2, 0, 0)])
-
             if self.wood_style == "regular":
-                pass
-            elif self.wood_style == "parquet":
-                pass
-            elif self.wood_style == "herringbone":
-                pass
-            elif self.wood_style == "herringbone_parquet":
-                pass
+                self.add_manipulator("board_length", (0, 0, z), (0, self.board_length, z), (0.1, 0, z))
+                self.add_manipulator("board_width", (0, 0, z), (self.board_width, 0, z), (-0.2, 0, z))
+            elif self.wood_style == "square_parquet":
+                self.add_manipulator("short_board_length", (0, 0, z), (0, self.short_board_length, z), (-0.2, 0, z))
+            elif self.wood_style in ("herringbone" , "herringbone_parquet"):
+                dia = self.short_board_length * cos(radians(45))
+                dia2 = self.board_width * cos(radians(45))
+                self.add_manipulator("short_board_length", (0, 0, z), (dia, dia, z), (0, 0, z))
+                self.add_manipulator("board_width", (dia, 0, z), (dia - dia2, dia2, z), (0, 0, z))
 
         elif self.floor_material == "tile":
-            self.manipulators[2].prop1_name = "tile_length"
-            self.manipulators[2].set_pts([(0, 0, 0), (0, self.tile_length, 0), (-0.2, 0, 0)])
+            tl = self.tile_length
+            tw = self.tile_width
 
-            self.manipulators[3].prop1_name = "tile_width"
-            self.manipulators[3].set_pts(
-                [(0, 0, self.thickness), (self.tile_width, 0, self.thickness), (-0.2, 0, 0)])
-
-            if self.tile_style == "regular":
-                pass
-            elif self.tile_style == "hopscotch":
-                pass
-            elif self.tile_style == "stepping_stone":
-                pass
+            if self.tile_style in ("regular", "hopscotch", "stepping_stone"):
+                self.add_manipulator("tile_width", (0, tl, z), (tw, tl, z), (0, 0, z))
+                self.add_manipulator("tile_length", (0, 0, z), (0, tl, z), (0, 0, z))
             elif self.tile_style == "hexagon":
-                pass
+                self.add_manipulator("tile_width", (tw / 2 + self.spacing, 0, z), (tw * 1.5 + self.spacing, 0, z),
+                                     (0, 0, 0))
             elif self.tile_style == "windmill":
-                pass
+                self.add_manipulator("tile_width", (0, 0, z), (tw, 0, 0), (0, 0, z))
+                self.add_manipulator("tile_length", (0, tl / 2 + self.spacing, z), (0, tl * 1.5 + self.spacing, z),
+                                     (0, 0, z))
 
     @property
     def verts(self):
@@ -1091,22 +1057,6 @@ class ARCHIPACK_OT_floor(Operator):
 
         # attach parametric datablock
         d = m.archipack_floor.add()
-
-        # setup manipulators for on screen editing
-        s = d.manipulators.add()
-        s.prop1_name = "width"
-
-        s = d.manipulators.add()
-        s.prop1_name = "length"
-
-        # these will be used for length and width respectively, but the property they link to will change based
-        # on whether the floor material is tile or wood, whether we are using short_board_length or the normal, etc.
-        # these are changed in archipack_floor.update()
-        s = d.manipulators.add()
-        s.prop1_name = "board_length"
-
-        s = d.manipulators.add()
-        s.prop1_name = "board_width"
 
         context.scene.objects.link(o)
         # make newly created object active

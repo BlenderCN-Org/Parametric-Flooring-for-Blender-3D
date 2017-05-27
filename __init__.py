@@ -57,6 +57,7 @@ from .simple_manipulator import Manipulable
 
 FOOT = 0.3048  # 1 foot in meters
 INCH = 0.0254  # 1 inch in meters
+EQUAL, NOT_EQUAL, LESS_EQUAL, GREATER_EQUAL, LESS, GREATER = [i for i in range(6)]
 
 # ------------------------------------------------------------------
 # Define property class to store object parameters and update mesh
@@ -68,9 +69,6 @@ def update(self, context):
 
 
 class archipack_floor(Manipulable, PropertyGroup):
-    # rough comparision constants
-    EQUAL, NOT_EQUAL, LESS_EQUAL, GREATER_EQUAL, LESS, GREATER = [i for i in range(6)]
-
     # keep track of data
     vs, fs = [], []  # vertices and faces
     ms = []  # mat ids
@@ -262,18 +260,18 @@ class archipack_floor(Manipulable, PropertyGroup):
         y1 = round(line(pt1[0]), 4)  # what the y-value on the line is for the x-value of the first point
         y2 = round(line(pt2[0]), 4)  # what the y-value on the line is for the x-value of the second point
 
-        if cl.rough_comp(line_segment[0][0], line_segment[1][0], cl.EQUAL):  # vertical line
-            if cl.rough_comp(pt1[0], line_segment[0][0], cl.GREATER_EQUAL) \
-                    and cl.rough_comp(pt2[0], line_segment[0][0], cl.GREATER_EQUAL):  # to the right of the line
+        if cl.rough_comp(line_segment[0][0], line_segment[1][0], EQUAL):  # vertical line
+            if cl.rough_comp(pt1[0], line_segment[0][0], GREATER_EQUAL) \
+                    and cl.rough_comp(pt2[0], line_segment[0][0], GREATER_EQUAL):  # to the right of the line
                 return True
-            elif cl.rough_comp(pt1[0], line_segment[0][0], cl.LESS_EQUAL) \
-                    and cl.rough_comp(pt2[0], line_segment[0][0], cl.LESS_EQUAL):  # to the left of the line
+            elif cl.rough_comp(pt1[0], line_segment[0][0], LESS_EQUAL) \
+                    and cl.rough_comp(pt2[0], line_segment[0][0], LESS_EQUAL):  # to the left of the line
                 return True
         # both points are below or on line
-        elif cl.rough_comp(pt1[1], y1, cl.LESS_EQUAL) and cl.rough_comp(pt2[1], y2, cl.LESS_EQUAL):
+        elif cl.rough_comp(pt1[1], y1, LESS_EQUAL) and cl.rough_comp(pt2[1], y2, LESS_EQUAL):
             return True
         # both points are above line
-        elif cl.rough_comp(pt1[1], y1, cl.GREATER_EQUAL) and cl.rough_comp(pt2[1], y2, cl.GREATER_EQUAL):
+        elif cl.rough_comp(pt1[1], y1, GREATER_EQUAL) and cl.rough_comp(pt2[1], y2, GREATER_EQUAL):
             return True
 
         return False
@@ -284,29 +282,28 @@ class archipack_floor(Manipulable, PropertyGroup):
         Check if val1 and val2 roughly compare to each other
         :param val1: first value
         :param val2: second value
-        :param comp: How to compare them, defined used constants in class like EQUAL, LESS_EQUAL, etc.
+        :param comp: How to compare them, defined using constants at top of file like EQUAL, LESS_EQUAL, etc.
         :return: Whether or not the values roughly compare to each other as specified by comp
         """
-        cl = archipack_floor
 
         # if allows equality
-        if comp in (cl.EQUAL, cl.LESS_EQUAL, cl.GREATER_EQUAL) and isclose(val1, val2, abs_tol=0.001):
+        if comp in (EQUAL, LESS_EQUAL, GREATER_EQUAL) and isclose(val1, val2, abs_tol=0.001):
             return True
-        elif comp == cl.NOT_EQUAL and not isclose(val1, val2, abs_tol=0.001):
+        elif comp == NOT_EQUAL and not isclose(val1, val2, abs_tol=0.001):
             return True
 
         # check inequalities with equality
         upper, lower = val2 - 0.001, val2 + 0.001  # allow a spread of values for the regular inequalities
 
-        if comp == cl.LESS_EQUAL and val1 < val2:
+        if comp == LESS_EQUAL and val1 < val2:
             return True
-        elif comp == cl.GREATER_EQUAL and val1 > val2:
+        elif comp == GREATER_EQUAL and val1 > val2:
             return True
 
         # check inequalities
-        elif comp == cl.LESS and (val1 < upper or val1 < lower):
+        elif comp == LESS and (val1 < upper or val1 < lower):
             return True
-        elif comp == cl.GREATER and (val1 > upper or val1 > lower):
+        elif comp == GREATER and (val1 > upper or val1 > lower):
             return True
 
         return False
@@ -479,10 +476,10 @@ class archipack_floor(Manipulable, PropertyGroup):
         :return: Whether or not the point is in the shape
         """
         # not in outer boundaries - use NOT and self.rough_comp to allow a little bit of wiggle room at boundaries
-        if not (self.rough_comp(point[0], 0, self.GREATER_EQUAL)
-                and self.rough_comp(point[0], self.width, self.LESS_EQUAL)
-                and self.rough_comp(point[1], 0, self.GREATER_EQUAL)
-                and self.rough_comp(point[1], self.length, self.LESS_EQUAL)):
+        if not (self.rough_comp(point[0], 0, GREATER_EQUAL)
+                and self.rough_comp(point[0], self.width, LESS_EQUAL)
+                and self.rough_comp(point[1], 0, GREATER_EQUAL)
+                and self.rough_comp(point[1], self.length, LESS_EQUAL)):
             return False
 
         # find center

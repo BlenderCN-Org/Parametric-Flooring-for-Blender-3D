@@ -302,7 +302,7 @@ class archipack_floor(Manipulable, PropertyGroup):
 
     @staticmethod
     def round_tuple(tup, digits=4):
-        return [round(i, digits) for i in tup]
+        return tuple([round(i, digits) for i in tup])
 
     @staticmethod
     def sort_corner_points(points):
@@ -419,18 +419,19 @@ class archipack_floor(Manipulable, PropertyGroup):
         for i in range(len(self.fs) - f):  # at material ids
             self.ms.append(mat_id)
 
-    def create_board_from_boundaries(self, segments, shape, th, mat_id=0):
+    def create_board_from_boundaries(self, shape, th, mat_id=0):
         """
         Create a board from boundary segments using the intersection of the segments as the corner points as long
         as they are within the specified shape, which is denoted by listing its boundary segments.
-        :param segments: All of the segments that must bound this board
         :param shape: The boundary segments of the board itself, used to check if a point is in the board or not
         :param th: The thickness of the board
         :param mat_id: The material id to use for the board        
         """
         # round off all of the shape points to prevent floating point errors
         shape = [[archipack_floor.round_tuple(i[0]), archipack_floor.round_tuple(i[1])] for i in shape]
-        corners = self.corner_points_from_boundaries(segments, shape)  # find the corner points
+        outer_boundaries = [[(0, 0), (0, self.length)], [(0, 0), (self.width, 0)],
+                            [(self.width, 0), (self.width, self.length)], [(self.width, self.length), (0, self.length)]]
+        corners = self.corner_points_from_boundaries(outer_boundaries + shape, shape)  # find the corner points
 
         if len(corners) >= 3:  # create the mesh itself as long as there is at-least 3 corner points
             self.add_shape_from_corner_points(corners, th, mat_id)
@@ -785,9 +786,6 @@ class archipack_floor(Manipulable, PropertyGroup):
 
     def wood_herringbone(self):
         sp = self.spacing
-        outer_boundaries = [[(0, 0), (0, self.length)], [(0, 0), (self.width, 0)],
-                            [(self.width, 0), (self.width, self.length)], [(self.width, self.length), (0, self.length)]]
-
         width_dif = self.board_width / cos(radians(45))
         x_dif = self.short_board_length * cos(radians(45))
         y_dif = self.short_board_length * sin(radians(45))
@@ -804,7 +802,7 @@ class archipack_floor(Manipulable, PropertyGroup):
                          [(cur_x, cur_y + width_dif), (cur_x, cur_y)]]
 
                 # left side
-                self.create_board_from_boundaries(outer_boundaries + board, board, self.thickness)
+                self.create_board_from_boundaries(board, self.thickness)
                 cur_x += x_dif + sp
 
                 # right side
@@ -814,7 +812,7 @@ class archipack_floor(Manipulable, PropertyGroup):
                              [(cur_x + x_dif, cur_y + width_dif), (cur_x, cur_y + total_y_dif)],
                              [(cur_x, cur_y + total_y_dif), (cur_x, cur_y + y_dif)]]
 
-                    self.create_board_from_boundaries(outer_boundaries + board, board, self.thickness)
+                    self.create_board_from_boundaries(board, self.thickness)
                     cur_x += x_dif + sp
 
             cur_y += width_dif + sp / cos(radians(45))  # adjust spacing amount for 45 degree angle

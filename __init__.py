@@ -47,7 +47,7 @@ from bpy.types import Operator, PropertyGroup, Mesh, Panel
 from bpy.props import FloatProperty, CollectionProperty, BoolProperty, IntProperty, EnumProperty
 import mathutils
 from random import uniform
-from math import radians, cos, sin, atan
+from math import radians, cos, sin, atan, isclose
 from .bmesh_utils import BmeshEdit
 from .simple_manipulator import Manipulable
 
@@ -68,6 +68,8 @@ def update(self, context):
 
 
 class archipack_floor(Manipulable, PropertyGroup):
+    # rough comparision constants
+    EQUAL, NOT_EQUAL, LESS_EQUAL, GREATER_EQUAL, LESS, GREATER = [i for i in range(6)]
 
     # keep track of data
     vs, fs = [], []  # vertices and faces
@@ -231,10 +233,6 @@ class archipack_floor(Manipulable, PropertyGroup):
     def round_tuple(tup, digits=4):
         return [round(i, digits) for i in tup]
 
-    @staticmethod
-    def round_2d_list(li, digits=4):
-        return [archipack_floor.round_tuple(i, digits) for i in li]
-
     def add_cube_faces(self):
         p = len(self.vs) - 8
         self.append_all(self.fs, [(p, p + 2, p + 3, p + 1), (p + 2, p + 6, p + 7, p + 3), (p + 1, p + 3, p + 7, p + 5),
@@ -272,13 +270,11 @@ class archipack_floor(Manipulable, PropertyGroup):
     def corner_points_from_boundaries(self, segments, shape) -> list:
         """
         Take segments and intersect them to find corner points of object.
-        :param segments: The segments that form that boundaries, [[start_v, end_v], [start_v, end_v]...]
-        :param shape: The corner vertices to make sure the points found by intersecting the lines are inside the object,
-        [corner_v, corner_v2...]
+        :param segments: The segments that form that boundaries, [[start_v, end_v], [start_v2, end_v2]...]
+        :param shape: The segments that make up the shape, [[start_v, end_v], [start_v2, end_v2]...]
         :return: The points that form the corners of the object [corner_v, corner_v2...]
         """
         out = []
-        shape = archipack_floor.round_2d_list(shape)
 
         for i in range(0, len(segments) - 1):
             for j in range(i + 1, len(segments)):
@@ -292,23 +288,93 @@ class archipack_floor(Manipulable, PropertyGroup):
                         out.append(r_point)
         return out
 
-    def point_in_shape(self, point, shape) -> bool:
-        """
-        Find if the point is in the shape
-        :param point: An (x, y) tuple with the point to check
-        :param shape: The corner vertices that make up that shape [corner_v, corner_v2...]
-        :return: Whether or not the point is in the shape
-        """
-        if mathutils.geometry.intersect_point_quad_2d(point, *shape) == 1:  # inside board
-            if 0 <= point[0] <= self.width and 0 <= point[1] <= self.length:  # inside outer bounds
-                return True
+    @staticmethod
+    def rough_comp(val1, val2, comp):
+        cl = archipack_floor
+
+        # if allows equality
+        if comp in (cl.EQUAL, cl.LESS_EQUAL, cl.GREATER_EQUAL) and isclose(val1, val2, abs_tol=0.001):
+            return True
+        elif comp == cl.NOT_EQUAL and not isclose(val1, val2, abs_tol=0.001):
+            return True
+
+        # check inequalities with equality
+        upper, lower = val2 - 0.001, val2 + 0.001  # allow a spread of values for the regular inequalities
+
+        if comp == cl.LESS_EQUAL and val1 < val2:
+            return True
+        elif comp == cl.GREATER_EQUAL and val1 > val2:
+            return True
+
+        # check inequalities
+        elif comp == cl.LESS and (val1 < upper or val1 < lower):
+            return True
+        elif comp == cl.GREATER and (val1 > upper or val1 > lower):
+            return True
 
         return False
+
+    @staticmethod
+    def points_on_same_side_of_line_segment(pt1, pt2, line_segment) -> bool:
+        cl = archipack_floor
+
+        line = archipack_floor.line_from_points(line_segment[0], line_segment[1])
+        y1 = round(line(pt1[0]), 4)  # what the y-value on the line is for the x-value of the first point
+        y2 = round(line(pt2[0]), 4)  # what the y-value on the line is for the x-value of the second point
+
+        if line_segment[0][0] == line_segment[1][0]:  # vertical line
+            if pt1[0] >= line_segment[0][0] and pt2[0] >= line_segment[0][0]:  # to the right of the line
+                return True
+            elif pt1[0] <= line_segment[0][0] and pt2[0] <= line_segment[0][0]:  # to the left of the line
+                return True
+        # both points are below or on line
+        elif cl.rough_comp(pt1[1], y1, cl.LESS_EQUAL) and cl.rough_comp(pt2[1], y2, cl.LESS_EQUAL):
+            return True
+        # both points are above line
+        elif cl.rough_comp(pt1[1], y1, cl.GREATER_EQUAL) and cl.rough_comp(pt2[1], y2, cl.GREATER_EQUAL):
+            return True
+        else:
+            return False
+
+    @staticmethod
+    def line_from_points(pt1, pt2) -> callable:
+        slope = (pt2[1] - pt1[1]) / (pt2[0] - pt1[0]) if (pt2[0] - pt1[0]) != 0 else 0
+        return lambda x: slope * (x - pt1[0]) + pt1[1]
+
+    def point_in_shape(self, point, shape) -> bool:
+        """
+        Find if the point is in the shape, do this by find that center of the shape, and then go through each segment
+        and make sure point is on the same side of the line as the center
+        :param point: An (x, y) tuple with the point to check
+        :param shape: The line segments that make up the shape, [[start_v, end_v], [start_v2, end_v2]...]
+        :return: Whether or not the point is in the shape
+        """
+        # not in outer boundaries - use NOT and self.rough_comp to allow a little bit of wiggle room at boundaries
+        if not (self.rough_comp(point[0], 0, self.GREATER_EQUAL)
+                and self.rough_comp(point[0], self.width, self.LESS_EQUAL)
+                and self.rough_comp(point[1], 0, self.GREATER_EQUAL)
+                and self.rough_comp(point[1], self.length, self.LESS_EQUAL)):
+            return False
+
+        # find center
+        center = mathutils.Vector((0, 0))
+        for seg in shape:
+            center += mathutils.Vector(seg[0])
+            center += mathutils.Vector(seg[1])
+        center = archipack_floor.round_tuple(tuple(center / (2*len(shape)))) if len(shape) != 0 else (0, 0)
+
+        # go through each line segment and make sure point is on the same side as the center
+        for seg in shape:
+            if not archipack_floor.points_on_same_side_of_line_segment(center, point, seg):  # not in board
+                return False
+
+        return True
 
     def add_shape_from_corner_points(self, points, th, mat_id=0):
         points = archipack_floor.sort_corner_points(points)
 
         p = len(self.vs)
+        f = len(self.fs)
         # add vertices
         for pt in points:
             self.vs.append((pt[0], pt[1], 0))
@@ -335,9 +401,15 @@ class archipack_floor(Manipulable, PropertyGroup):
         self.fs.append(top_face)
         self.fs.append(bottom_face)
 
+        for i in range(len(self.fs) - f):
+            self.ms.append(mat_id)
+
     def create_board_from_boundaries(self, segments, shape, th, mat_id=0):
+        shape = [[archipack_floor.round_tuple(i[0]), archipack_floor.round_tuple(i[1])] for i in shape]  # round
         corners = self.corner_points_from_boundaries(segments, shape)
-        self.add_shape_from_corner_points(corners, th, mat_id)
+
+        if len(corners) >= 3:  # if there aren't at least 3 corners
+            self.add_shape_from_corner_points(corners, th, mat_id)
 
     @staticmethod
     def sort_corner_points(points):
@@ -350,12 +422,16 @@ class archipack_floor(Manipulable, PropertyGroup):
         center = mathutils.Vector((0, 0))
         for pt in points:
             center += mathutils.Vector(pt)
-        center = center / len(points) if len(points) != 0 else 0
+        center = center / len(points) if len(points) != 0 else (0, 0)
 
         # find angles
         unsorted = []
         for pt in points:
-            ang = atan((pt[1] - center[1]) / (pt[0] - center[0]))
+            if pt[0] - center[0] != 0:
+                ang = atan((pt[1] - center[1]) / (pt[0] - center[0]))
+            else:
+                ang = radians(90)
+
             if pt[0] < center[0]:
                 ang += radians(180)
             elif pt[1] < center[1]:
@@ -672,44 +748,46 @@ class archipack_floor(Manipulable, PropertyGroup):
 
     def wood_herringbone(self):
         sp = self.spacing
-        boundaries = [[(0, 0), (0, self.length)], [(0, 0), (self.width, 0)],
-                      [(self.width, 0), (self.width, self.length)], [(self.width, self.length), (0, self.length)]]
+        outer_boundaries = [[(0, 0), (0, self.length)], [(0, 0), (self.width, 0)],
+                            [(self.width, 0), (self.width, self.length)], [(self.width, self.length), (0, self.length)]]
 
         width_dif = self.board_width / cos(radians(45))
         x_dif = self.short_board_length * cos(radians(45))
         y_dif = self.short_board_length * sin(radians(45))
         total_y_dif = width_dif + y_dif
 
-        cur_y = 0
+        cur_y = -y_dif
         while cur_y < self.length:
             cur_x = 0
 
             while cur_x < self.width:
-                print("--------------------")
+                board = [[(cur_x, cur_y), (cur_x + x_dif, cur_y + y_dif)],
+                         [(cur_x + x_dif, cur_y + y_dif), (cur_x + x_dif, cur_y + total_y_dif)],
+                         [(cur_x + x_dif, cur_y + total_y_dif), (cur_x, cur_y + width_dif)],
+                         [(cur_x, cur_y + width_dif), (cur_x, cur_y)]]
+
                 # left side
                 self.create_board_from_boundaries(
-                    boundaries + [[(cur_x, cur_y), (cur_x + x_dif, cur_y + y_dif)],
-                                  [(cur_x + x_dif, cur_y + y_dif), (cur_x + x_dif, cur_y + total_y_dif)],
-                                  [(cur_x + x_dif, cur_y + total_y_dif), (cur_x, cur_y + width_dif)],
-                                  [(cur_x, cur_y + width_dif), (cur_x, cur_y)]],
-                    [(cur_x, cur_y), (cur_x + x_dif, cur_y + y_dif), (cur_x + x_dif, cur_y + total_y_dif),
-                     (cur_x, cur_y + width_dif)],
+                    outer_boundaries + board,
+                    board,
                     self.thickness
                 )
 
-                cur_x = self.width
+                cur_x += x_dif + sp
 
                 # right side
-                # if cur_x < self.width:
-                #     self.board_from_boundary_lines(
-                #         boundaries + [[(cur_x, cur_y + y_dif), (cur_x + x_dif, cur_y)],
-                #                       [(cur_x + x_dif, cur_y), (cur_x + x_dif, cur_y + width_dif)],
-                #                       [(cur_x + x_dif, cur_y + width_dif), (cur_x, cur_y + total_y_dif)],
-                #                       [(cur_x, cur_y + total_y_dif), (cur_x, cur_y + y_dif)]],
-                #         [(cur_x, cur_y + y_dif), (cur_x + x_dif, cur_y), (cur_x + x_dif, cur_y + width_dif),
-                #          (cur_x, cur_y + total_y_dif)], self.thickness)
-                #
-                #     cur_x += x_dif + sp
+                if cur_x < self.width:
+                    board = [[(cur_x, cur_y + y_dif), (cur_x + x_dif, cur_y)],
+                             [(cur_x + x_dif, cur_y), (cur_x + x_dif, cur_y + width_dif)],
+                             [(cur_x + x_dif, cur_y + width_dif), (cur_x, cur_y + total_y_dif)],
+                             [(cur_x, cur_y + total_y_dif), (cur_x, cur_y + y_dif)]]
+                    self.create_board_from_boundaries(
+                        outer_boundaries + board,
+                        board,
+                        self.thickness
+                    )
+
+                    cur_x += x_dif + sp
 
             cur_y += width_dif + sp / cos(radians(45))  # adjust spacing amount for 45 degree angle
 

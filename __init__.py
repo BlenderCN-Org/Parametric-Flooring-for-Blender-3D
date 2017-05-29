@@ -65,7 +65,8 @@ EQUAL, NOT_EQUAL, LESS_EQUAL, GREATER_EQUAL, LESS, GREATER = [i for i in range(6
 
 
 def update(self, context):
-    self.update(context)
+    if self.auto_update:
+        self.update(context)
 
 
 class archipack_floor(Manipulable, PropertyGroup):
@@ -73,19 +74,24 @@ class archipack_floor(Manipulable, PropertyGroup):
     vs, fs = [], []  # vertices and faces
     ms = []  # mat ids
 
+    auto_update = BoolProperty(
+        name="Auto Update Mesh", default=True, update=update,
+        description="Automatically update the mesh whenever a parameter is changed"
+    )
+
     # floor type
     floor_material = EnumProperty(
-        name="floor material", items=(("wood", "Wood", ""), ("tile", "Tile", "")),
+        name="Floor Material", items=(("wood", "Wood", ""), ("tile", "Tile", "")),
         default="wood", description="Type of material the floor is made of", update=update
     )
     wood_style = EnumProperty(
-        name='wood style', items=(("regular", "Regular", ""), ("square_parquet", "Square Parquet", ""),
+        name='Wood Style', items=(("regular", "Regular", ""), ("square_parquet", "Square Parquet", ""),
                                   ("herringbone_parquet", "Herringbone Parquet", ""),
                                   ("herringbone", "Herringbone", "")), default="regular",
         description="Style of wood floor", update=update
     )
     tile_style = EnumProperty(
-        name='tile style', items=(("regular", "Regular", ""), ("hopscotch", "Hopscotch", ""),
+        name='Tile Style', items=(("regular", "Regular", ""), ("hopscotch", "Hopscotch", ""),
                                   ("stepping_stone", "Stepping Stone", ""), ("hexagon", "Hexagon", ""),
                                   ("windmill", "Windmill", "")),
         default="regular", update=update
@@ -93,14 +99,14 @@ class archipack_floor(Manipulable, PropertyGroup):
 
     # overall length and width
     width = FloatProperty(  # x
-        name='width',
+        name='Width',
         min=2*FOOT, soft_max=100*FOOT,
         default=20*FOOT, precision=2,
         description='Width', update=update,
         subtype="DISTANCE"
     )
     length = FloatProperty(  # y
-        name='length',
+        name='Length',
         min=2*FOOT, soft_max=100*FOOT,
         default=8*FOOT, precision=2,
         description='Length', update=update,
@@ -109,116 +115,116 @@ class archipack_floor(Manipulable, PropertyGroup):
 
     # generic spacing
     spacing = FloatProperty(
-        name='spacing', unit='LENGTH', min=0, soft_max=1 * INCH,
+        name='Spacing', unit='LENGTH', min=0, soft_max=1 * INCH,
         default=0.125 * INCH, precision=2, update=update,
         description='The amount of space between boards or tiles in both directions'
     )
 
-    # board thickness
+    # general thickness
     thickness = FloatProperty(  # z
-        name='thickness',
+        name='Thickness',
         min=0.25*INCH, soft_max=2*INCH,
         default=1*INCH, precision=2,
         description='Thickness', update=update,
         subtype="DISTANCE"
     )
     vary_thickness = BoolProperty(
-        name='vary thickness', update=update, default=False,
+        name='Vary Thickness', update=update, default=False,
         description='Vary board thickness?'
     )
     thickness_variance = FloatProperty(
-        name='thickness variance', min=1, max=100,
-        default=50, update=update, precision=2,
+        name='Thickness Variance', min=1, max=100,
+        default=25, update=update, precision=2,
         description='How much board thickness can vary by'
     )
 
     # board width, variance, and spacing
     board_width = FloatProperty(
-        name='board width', unit='LENGTH', min=2*INCH,
+        name='Board Width', unit='LENGTH', min=2*INCH,
         soft_max=2*FOOT, default=6*INCH, update=update,
         description='The width of the boards', precision=2
     )
     vary_width = BoolProperty(
-        name='vary width', default=False,
+        name='Vary Width', default=False,
         description='Vary board width?', update=update
     )
     width_variance = FloatProperty(
-        name='width variance', subtype='PERCENTAGE',
+        name='Width Variance', subtype='PERCENTAGE',
         min=1, max=100, default=50, description='How much board width can vary by',
         precision=2, update=update
     )
     width_spacing = FloatProperty(
-        name='width spacing', unit='LENGTH', min=0, soft_max=1*INCH,
+        name='Width Spacing', unit='LENGTH', min=0, soft_max=1*INCH,
         default=0.125*INCH, precision=2, update=update,
         description='The amount of space between boards in the width direction'
     )
 
     # board length
     board_length = FloatProperty(
-        name='board length', unit='LENGTH', min=2*FOOT,
+        name='Board Length', unit='LENGTH', min=2*FOOT,
         soft_max=100*FOOT, default=8*FOOT, update=update,
         description='The length of the boards', precision=2
     )
     short_board_length = FloatProperty(
-        name='board length', unit='LENGTH', min=6*INCH,
+        name='Board Length', unit='LENGTH', min=6*INCH,
         soft_max=4*FOOT, default=2*FOOT, update=update,
         description='The length of the boards', precision=2
     )
     vary_length = BoolProperty(
-        name='vary length', default=False,
+        name='Vary Length', default=False,
         description='Vary board length?', update=update
     )
     length_variance = FloatProperty(
-        name='length variance', subtype='PERCENTAGE',
+        name='Length Variance', subtype='PERCENTAGE',
         min=1, max=100, default=50, description='How much board length can vary by',
         precision=2, update=update
     )
     max_boards = IntProperty(
-        name='max boards', min=1, soft_max=10, default=2,
+        name='Max Boards', min=1, soft_max=10, default=2,
         update=update, description='Max number of boards in one row'
     )
     length_spacing = FloatProperty(
-        name='length spacing', unit='LENGTH', min=0, soft_max=1*INCH,
+        name='Length Spacing', unit='LENGTH', min=0, soft_max=1*INCH,
         default=0.125*INCH, precision=2, update=update,
         description='The amount of space between boards in the length direction'
     )
 
     # parquet specific
     boards_in_group = IntProperty(
-        name='boards in group', min=1, soft_max=10, default=4,
+        name='Boards in Group', min=1, soft_max=10, default=4,
         update=update, description='Number of boards in a group'
     )
 
     # tile specific
     tile_width = FloatProperty(
-        name='tile width', min=2*INCH, soft_max=2*FOOT, default=1*FOOT,
+        name='Tile Width', min=2*INCH, soft_max=2*FOOT, default=1*FOOT,
         update=update, precision=2, description='Width of the tiles', unit='LENGTH',
     )
     tile_length = FloatProperty(
-        name='tile length', min=2*INCH, soft_max=2*FOOT, default=8*INCH,
+        name='Tile Length', min=2*INCH, soft_max=2*FOOT, default=8*INCH,
         update=update, precision=2, description='Length of the tiles', unit='LENGTH',
     )
     mortar_depth = FloatProperty(
-        name='mortar depth', min=0, soft_max=1*INCH, default=0.25*INCH,
+        name='Mortar Depth', min=0, soft_max=1*INCH, default=0.25*INCH,
         update=update, precision=2, unit='LENGTH',
         description='The depth of the mortar from the surface of the tile'
     )
 
     # regular tile
     offset_tiles = BoolProperty(
-        name='offset tiles', update=update, default=False,
+        name='Offset Tiles', update=update, default=False,
         description='Offset the tiles?'
     )
     random_offset = BoolProperty(
-        name='random offset', update=update, default=False,
+        name='Random Offset', update=update, default=False,
         description='Random amount of offset for each row of tiles'
     )
     offset = FloatProperty(
-        name='offset', update=update, min=0.001, max=100, default=50,
+        name='Offset', update=update, min=0.001, max=100, default=50,
         precision=2, description='How much to offset each row of tiles'
     )
     offset_variance = FloatProperty(
-        name='offset variance', update=update, min=0.001, max=100, default=50,
+        name='Offset Variance', update=update, min=0.001, max=100, default=50,
         precision=2, description='How much to vary the offset each row of tiles'
     )
 
@@ -364,6 +370,56 @@ class archipack_floor(Manipulable, PropertyGroup):
 
         return [i[1] for i in sorted_]
 
+    def add_board_from_boundaries(self, shape, th, mat_id=0):
+        """
+        Add a board from boundary segments using the intersection of the segments as the corner points as long
+        as they are within the specified shape, which is denoted by listing its boundary segments.
+        :param shape: The boundary segments of the board itself, used to check if a point is in the board or not
+        :param th: The thickness of the board
+        :param mat_id: The material id to use for the board        
+        """
+        # round off all of the shape points to prevent floating point errors
+        shape = [[archipack_floor.round_tuple(i[0]), archipack_floor.round_tuple(i[1])] for i in shape]
+        outer_boundaries = [[(0, 0), (0, self.length)], [(0, 0), (self.width, 0)],
+                            [(self.width, 0), (self.width, self.length)], [(self.width, self.length), (0, self.length)]]
+        corners = self.corner_points_from_boundaries(outer_boundaries + shape, shape)  # find the corner points
+
+        if len(corners) < 3:  # there needs to be at least three corners
+            return
+
+        points = archipack_floor.sort_corner_points(corners)
+
+        p = len(self.vs)
+        f = len(self.fs)
+        # add vertices
+        for pt in points:
+            self.vs.append((pt[0], pt[1], 0))
+            self.vs.append((pt[0], pt[1], th))
+
+        # add faces
+        start_p = p
+        top_face = []
+        bottom_face = []
+
+        for i in range(len(points) - 1):  # most of the edge faces
+            self.fs.append((p, p + 2, p + 3, p + 1))
+            top_face.append(p)
+            bottom_face.append(p + 1)
+            p += 2
+
+        # add last two vertices
+        top_face.append(p)
+        bottom_face.append(p + 1)
+
+        # final side face
+        self.fs.append((p, start_p, start_p + 1, p + 1))
+        top_face.reverse()  # reverse to get normals right
+        self.fs.append(top_face)
+        self.fs.append(bottom_face)
+
+        for i in range(len(self.fs) - f):  # at material ids
+            self.ms.append(mat_id)
+
     def add_cube(self, x, y, z, w, l, t, clip=True, mat_id=0):
         """
         Adds vertices, faces, and material ids for a cube, makes it easy since this shape is added so much
@@ -402,63 +458,6 @@ class archipack_floor(Manipulable, PropertyGroup):
         m = self.manipulators.add()
         m.prop1_name = name
         m.set_pts([pt1, pt2, pt3])
-
-    def add_shape_from_corner_points(self, points, th, mat_id=0):
-        """
-        Take corner point data and produce a mesh. Corner points will be sorted so that they are in order.
-        :param points: Corner points of mesh to add, [corner1, corner2...] 
-        :param th: Thickness of mesh
-        :param mat_id: Material id to assign faces
-        """
-        points = archipack_floor.sort_corner_points(points)
-
-        p = len(self.vs)
-        f = len(self.fs)
-        # add vertices
-        for pt in points:
-            self.vs.append((pt[0], pt[1], 0))
-            self.vs.append((pt[0], pt[1], th))
-
-        # add faces
-        start_p = p
-        top_face = []
-        bottom_face = []
-
-        for i in range(len(points) - 1):  # most of the edge faces
-            self.fs.append((p, p + 2, p + 3, p + 1))
-            top_face.append(p)
-            bottom_face.append(p + 1)
-            p += 2
-
-        # add last two vertices
-        top_face.append(p)
-        bottom_face.append(p + 1)
-
-        # final side face
-        self.fs.append((p, start_p, start_p + 1, p + 1))
-        top_face.reverse()  # reverse to get normals right
-        self.fs.append(top_face)
-        self.fs.append(bottom_face)
-
-        for i in range(len(self.fs) - f):  # at material ids
-            self.ms.append(mat_id)
-
-    def create_board_from_boundaries(self, shape, th, mat_id=0):
-        """
-        Create a board from boundary segments using the intersection of the segments as the corner points as long
-        as they are within the specified shape, which is denoted by listing its boundary segments.
-        :param shape: The boundary segments of the board itself, used to check if a point is in the board or not
-        :param th: The thickness of the board
-        :param mat_id: The material id to use for the board        
-        """
-        # round off all of the shape points to prevent floating point errors
-        shape = [[archipack_floor.round_tuple(i[0]), archipack_floor.round_tuple(i[1])] for i in shape]
-        outer_boundaries = [[(0, 0), (0, self.length)], [(0, 0), (self.width, 0)],
-                            [(self.width, 0), (self.width, self.length)], [(self.width, self.length), (0, self.length)]]
-        corners = self.corner_points_from_boundaries(outer_boundaries + shape, shape)  # find the corner points
-
-        if len(corners) >= 3:  # create the mesh itself as long as there is at-least 3 corner points
-            self.add_shape_from_corner_points(corners, th, mat_id)
 
     def corner_points_from_boundaries(self, segments, shape) -> list:
         """
@@ -686,7 +685,7 @@ class archipack_floor(Manipulable, PropertyGroup):
 
             while cur_x - width / 2 < self.width:  # place tile as long as left is still within bounds
                 segments = self.line_segments_from_points([(pt[0] + cur_x, pt[1] + cur_y) for pt in base_points])
-                self.create_board_from_boundaries(segments, th)
+                self.add_board_from_boundaries(segments, th)
 
                 cur_x += width + sp
 
@@ -820,7 +819,7 @@ class archipack_floor(Manipulable, PropertyGroup):
                     [(cur_x, cur_y), (cur_x + x_dif, cur_y + y_dif),
                      (cur_x + x_dif, cur_y + total_y_dif), (cur_x, cur_y + width_dif)]
                 )
-                self.create_board_from_boundaries(board, self.thickness)
+                self.add_board_from_boundaries(board, self.thickness)
                 cur_x += x_dif + self.spacing
 
                 # right side
@@ -829,7 +828,7 @@ class archipack_floor(Manipulable, PropertyGroup):
                         [(cur_x, cur_y + y_dif), (cur_x + x_dif, cur_y),
                          (cur_x + x_dif, cur_y + width_dif), (cur_x, cur_y + total_y_dif)]
                     )
-                    self.create_board_from_boundaries(board, self.thickness)
+                    self.add_board_from_boundaries(board, self.thickness)
                     cur_x += x_dif + self.spacing
 
             cur_y += width_dif + sp_dif  # adjust spacing amount for 45 degree angle
@@ -855,7 +854,7 @@ class archipack_floor(Manipulable, PropertyGroup):
                     [(cur_x, cur_y), (cur_x + x_dif, cur_y + y_dif),
                      (cur_x + x_dif - x_dif_45, cur_y + total_y_dif), (cur_x - x_dif_45, cur_y + y_dif_45)]
                 )
-                self.create_board_from_boundaries(board, self.thickness)
+                self.add_board_from_boundaries(board, self.thickness)
                 cur_x += x_dif - x_dif_45 + sp_dif
                 cur_y += y_dif - y_dif_45 - sp_dif
 
@@ -865,7 +864,7 @@ class archipack_floor(Manipulable, PropertyGroup):
                          (cur_x + x_dif + x_dif_45, cur_y - y_dif + y_dif_45),
                          (cur_x + x_dif_45, cur_y + y_dif_45)]
                     )
-                    self.create_board_from_boundaries(board, self.thickness)
+                    self.add_board_from_boundaries(board, self.thickness)
                     cur_x += x_dif + x_dif_45 + sp_dif
                     cur_y -= y_dif - y_dif_45 - sp_dif
 
@@ -912,7 +911,7 @@ class archipack_floor(Manipulable, PropertyGroup):
                 self.add_manipulator("board_width", (0, 0, z), (self.board_width, 0, z), (-0.2, 0, z))
             elif self.wood_style == "square_parquet":
                 self.add_manipulator("short_board_length", (0, 0, z), (0, self.short_board_length, z), (-0.2, 0, z))
-            elif self.wood_style in ("herringbone" , "herringbone_parquet"):
+            elif self.wood_style in ("herringbone", "herringbone_parquet"):
                 dia = self.short_board_length * cos(radians(45))
                 dia2 = self.board_width * cos(radians(45))
                 self.add_manipulator("short_board_length", (0, 0, z), (dia, dia, z), (0, 0, z))
@@ -935,31 +934,19 @@ class archipack_floor(Manipulable, PropertyGroup):
 
     @property
     def verts(self):
-        """
-            Object vertices coords
-        """
         return self.vs
 
     @property
     def faces(self):
-        """
-            Object faces vertices index
-        """
         return self.fs
 
     @property
     def uvs(self):
-        """
-            Object faces uv coords
-        """
         return []
 
     @property
     def matids(self):
-        """
-            Object material indexes
-        """
-        return []
+        return self.ms
 
     def update(self, context):
 
@@ -973,7 +960,7 @@ class archipack_floor(Manipulable, PropertyGroup):
         context.scene.objects.active = o
 
         self.update_data()  # update vertices and faces
-        BmeshEdit.buildmesh(context, o, self.verts, self.faces)  # , matids=self.matids, uvs=self.uvs)
+        BmeshEdit.buildmesh(context, o, self.verts, self.faces, matids=self.matids)  # , uvs=self.uvs)
 
         # update manipulators
         self.update_manipulators()
@@ -1002,17 +989,64 @@ class ARCHIPACK_PT_floor(Panel):
         if props is None:
             return
 
-        layout.prop(props, 'floor_material')
+        # manipulate
+        layout.operator("archipack.floor_manipulate")
+        layout.separator()
 
+        # materials / style
+        layout.prop(props, 'floor_material')
         if props.floor_material == "wood":
             layout.prop(props, 'wood_style')
         elif props.floor_material == 'tile':
             layout.prop(props, 'tile_style')
+        layout.separator()
 
+        # overall measurements
         layout.prop(props, 'width')
         layout.prop(props, 'length')
+
+        # thickness
+        layout.separator()
         layout.prop(props, 'thickness')
-        layout.operator("archipack.floor_manipulate")
+        layout.prop(props, 'vary_thickness', icon='RNDCURVE')
+        if props.vary_thickness:
+            layout.prop(props, 'thickness_variance')
+        layout.separator()
+
+        # wood
+        if props.floor_material == "wood":
+            # length
+            if props.wood_style == 'regular':
+                layout.prop(props, 'board_length')
+                layout.prop(props, 'vary_length', icon='RNDCURVE')
+                if props.vary_length:
+                    layout.prop(props, 'length_variance')
+                    layout.prop(props, 'max_boards')
+                layout.separator()
+
+                layout.prop(props, 'length_spacing')
+                layout.prop(props, 'width_spacing')
+                layout.separator()
+            else:
+                layout.prop(props, 'short_board_length')
+
+                if props.wood_style == 'herringbone_parquet':
+                    layout.prop(props, 'boards_in_group')
+
+            # width
+            layout.prop(props, 'board_width')
+            # vary width
+            if props.wood_style == 'regular':
+                layout.prop(props, 'vary_width', icon='RNDCURVE')
+                if props.vary_width:
+                    layout.prop(props, 'width_variance')
+                layout.separator()
+
+        # updating
+        layout.separator()
+        layout.prop(props, 'auto_update', icon='FILE_REFRESH')
+        if not props.auto_update:
+            layout.operator('archipack.floor_update')
 
     @classmethod
     def params(cls, o):
@@ -1081,6 +1115,34 @@ class ARCHIPACK_OT_floor(Operator):
             return {'CANCELLED'}
 
 # ------------------------------------------------------------------
+# Define operator for manually updating mesh
+# ------------------------------------------------------------------
+
+
+class ARCHIPACK_OT_floor_update(Operator):
+    bl_idname = "archipack.floor_update"
+    bl_label = "Update Floor"
+    bl_description = "Manually update floor"
+    bl_category = 'Sample'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return ARCHIPACK_PT_floor.filter(context.active_object)
+
+    def execute(self, context):
+        if context.mode == "OBJECT":
+            o, props = ARCHIPACK_PT_floor.params(context.object)
+            if props is None:
+                return
+
+            props.update(context)
+            return {'FINISHED'}
+        else:
+            self.report({'WARNING'}, "Option only valid in Object mode")
+            return {'CANCELLED'}
+
+# ------------------------------------------------------------------
 # Define operator class to manipulate object
 # ------------------------------------------------------------------
 
@@ -1092,7 +1154,7 @@ class ARCHIPACK_OT_floor_manipulate(Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
-    def poll(self, context):
+    def poll(cls, context):
         return ARCHIPACK_PT_floor.filter(context.active_object)
 
     def modal(self, context, event):
@@ -1137,6 +1199,7 @@ class TOOLS_PT_parametric_object(Panel):
 def register():
     bpy.utils.register_class(archipack_floor)
     bpy.utils.register_class(ARCHIPACK_OT_floor_manipulate)
+    bpy.utils.register_class(ARCHIPACK_OT_floor_update)
     bpy.utils.register_class(ARCHIPACK_OT_floor)
     bpy.utils.register_class(ARCHIPACK_PT_floor)
     bpy.utils.register_class(TOOLS_PT_parametric_object)
@@ -1146,6 +1209,7 @@ def register():
 def unregister():
     bpy.utils.unregister_class(archipack_floor)
     bpy.utils.unregister_class(ARCHIPACK_OT_floor_manipulate)
+    bpy.utils.unregister_class(ARCHIPACK_OT_floor_update)
     bpy.utils.unregister_class(ARCHIPACK_OT_floor)
     bpy.utils.unregister_class(ARCHIPACK_PT_floor)
     bpy.utils.unregister_class(TOOLS_PT_parametric_object)

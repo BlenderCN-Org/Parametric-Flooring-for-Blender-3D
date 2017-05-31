@@ -326,19 +326,15 @@ class archipack_floor(Manipulable, PropertyGroup):
         return tuple([round(i, digits) for i in tup])
 
     @staticmethod
-    def sort_corner_points(points):
+    def sort_corner_points(points, center):
         """
-        Sort corner points so they are in a counter-clockwise order, do this by finding the center and then the angle
+        Sort corner points so they are in a counter-clockwise order, do this by using the center and the angle
         between each point and the center. Then sort those angles from least to greatest and get the point associated
         with that angle. Since the shape is convex, no two points will have the same angle.
         :param points: The corner points to be sorted
+        :param center: the center of the shape
         :return: the corner points sorted in a counter-clockwise order
         """
-        # find center
-        center = mathutils.Vector((0, 0))
-        for pt in points:
-            center += mathutils.Vector(pt)
-        center = center / len(points) if len(points) != 0 else (0, 0)
 
         # find angles
         unsorted = []
@@ -376,14 +372,22 @@ class archipack_floor(Manipulable, PropertyGroup):
         """
         # round off all of the shape points to prevent floating point errors
         shape = [[archipack_floor.round_tuple(i[0]), archipack_floor.round_tuple(i[1])] for i in shape]
+
+        # shape center
+        center = mathutils.Vector((0, 0))
+        for seg in shape:
+            center += mathutils.Vector(seg[0])
+            center += mathutils.Vector(seg[1])
+        center = archipack_floor.round_tuple(tuple(center / (2 * len(shape)))) if len(shape) != 0 else (0, 0)
+
         outer_boundaries = [[(0, 0), (0, self.length)], [(0, 0), (self.width, 0)],
                             [(self.width, 0), (self.width, self.length)], [(self.width, self.length), (0, self.length)]]
-        corners = self.corner_points_from_boundaries(outer_boundaries + shape, shape)  # find the corner points
+        corners = self.corner_points_from_boundaries(outer_boundaries + shape, shape, center)  # find the corner points
 
         if len(corners) < 3:  # there needs to be at least three corners
             return
 
-        points = archipack_floor.sort_corner_points(corners)
+        points = archipack_floor.sort_corner_points(corners, center)
 
         p = len(self.vs)
         f = len(self.fs)
@@ -455,12 +459,13 @@ class archipack_floor(Manipulable, PropertyGroup):
         m.prop1_name = name
         m.set_pts([pt1, pt2, pt3])
 
-    def corner_points_from_boundaries(self, segments, shape) -> list:
+    def corner_points_from_boundaries(self, segments, shape, center) -> list:
         """
         Take segments and intersect them to find corner points of object. Make sure all points are within outer
         boundaries, and the shape
         :param segments: The segments that form that boundaries, [[start_v, end_v], [start_v2, end_v2]...]
         :param shape: The segments that make up the shape, [[start_v, end_v], [start_v2, end_v2]...]
+        :param center: The center of shape
         :return: The points that form the corners of the object [corner_v, corner_v2...]
         """
         out = []
@@ -474,7 +479,7 @@ class archipack_floor(Manipulable, PropertyGroup):
                 if point is not None:
                     r_point = archipack_floor.round_tuple(tuple(point))
 
-                    if r_point not in out and self.point_in_shape(r_point, shape):
+                    if r_point not in out and self.point_in_shape(r_point, shape, center):
                         out.append(r_point)
         return out
 
@@ -486,12 +491,13 @@ class archipack_floor(Manipulable, PropertyGroup):
         else:
             return self.thickness
 
-    def point_in_shape(self, point, shape) -> bool:
+    def point_in_shape(self, point, shape, center) -> bool:
         """
         Find if the point is in the shape, do this by finding the center of the shape, and then go through each segment
         and make sure the point is on the same side of the line as the center, if it is, then it is inside the shape
         :param point: An (x, y) tuple with the point to check
         :param shape: The line segments that make up the shape, [[start_v, end_v], [start_v2, end_v2]...]
+        :param center: the center of shape
         :return: Whether or not the point is in the shape
         """
         # not in outer boundaries - use NOT and self.rough_comp to allow a little bit of wiggle room at boundaries
@@ -500,13 +506,6 @@ class archipack_floor(Manipulable, PropertyGroup):
                 and self.rough_comp(point[1], 0, GREATER_EQUAL)
                 and self.rough_comp(point[1], self.length, LESS_EQUAL)):
             return False
-
-        # find center
-        center = mathutils.Vector((0, 0))
-        for seg in shape:
-            center += mathutils.Vector(seg[0])
-            center += mathutils.Vector(seg[1])
-        center = archipack_floor.round_tuple(tuple(center / (2*len(shape)))) if len(shape) != 0 else (0, 0)
 
         # go through each line segment and make sure point is on the same side as the center
         for seg in shape:
@@ -664,7 +663,6 @@ class archipack_floor(Manipulable, PropertyGroup):
 
             row = (row + 1) % 2
 
-    # TODO: fix face issue that only occurs sometimes
     def tile_hexagon(self):
         """
           __  Hexagon tiles
@@ -1051,7 +1049,8 @@ class ARCHIPACK_PT_floor(Panel):
         # tile
         elif props.floor_material == "tile":
             # width and length and mortar
-            layout.prop(props, "tile_length")
+            if props.tile_style != "hexagon":
+                layout.prop(props, "tile_length")
             layout.prop(props, "tile_width")
             layout.prop(props, "mortar_depth")
             layout.separator()

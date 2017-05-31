@@ -133,7 +133,7 @@ class archipack_floor(Manipulable, PropertyGroup):
         description='Vary board thickness?'
     )
     thickness_variance = FloatProperty(
-        name='Thickness Variance', min=1, max=100,
+        name='Thickness Variance', min=0, max=100,
         default=25, update=update, precision=2,
         description='How much board thickness can vary by'
     )
@@ -211,16 +211,12 @@ class archipack_floor(Manipulable, PropertyGroup):
     )
 
     # regular tile
-    offset_tiles = BoolProperty(
-        name='Offset Tiles', update=update, default=False,
-        description='Offset the tiles?'
-    )
     random_offset = BoolProperty(
         name='Random Offset', update=update, default=False,
         description='Random amount of offset for each row of tiles'
     )
     offset = FloatProperty(
-        name='Offset', update=update, min=0.001, max=100, default=50,
+        name='Offset', update=update, min=0, max=100, default=0,
         precision=2, description='How much to offset each row of tiles'
     )
     offset_variance = FloatProperty(
@@ -482,6 +478,14 @@ class archipack_floor(Manipulable, PropertyGroup):
                         out.append(r_point)
         return out
 
+    def get_thickness(self):
+        if self.vary_thickness:
+            off = 1 / (100 / self.thickness_variance) if self.thickness_variance != 0 else 0
+            v = off * self.thickness
+            return uniform(self.thickness - v, self.thickness + v)
+        else:
+            return self.thickness
+
     def point_in_shape(self, point, shape) -> bool:
         """
         Find if the point is in the shape, do this by finding the center of the shape, and then go through each segment
@@ -528,9 +532,8 @@ class archipack_floor(Manipulable, PropertyGroup):
           |____||____||____| 
         """
         off = False
-        o = 1 / (100 / self.offset)
+        o = 1 / (100 / self.offset) if self.offset != 0 else 0
         cur_y = 0.0
-        z = self.thickness
 
         while cur_y < self.length:
             cur_x = 0.0
@@ -543,13 +546,13 @@ class archipack_floor(Manipulable, PropertyGroup):
 
                 if cur_x < self.width < cur_x + self.tile_width:
                     tw2 = self.width - cur_x
-                elif cur_x == 0.0 and off and self.offset_tiles and not self.random_offset:
+                elif cur_x == 0.0 and off and not self.random_offset:
                     tw2 = self.tile_width * o
-                elif cur_x == 0.0 and self.offset_tiles and self.random_offset:
-                    v = self.tile_length * 0.0049 * self.offset_variance
-                    tw2 = uniform((self.tile_length / 2) - v, (self.tile_length / 2) + v)
+                elif cur_x == 0.0 and self.random_offset:
+                    v = self.tile_width * self.offset_variance * 0.0049
+                    tw2 = uniform((self.tile_width / 2) - v, (self.tile_width / 2) + v)
 
-                self.add_cube(cur_x, cur_y, 0, tw2, tl2, z)
+                self.add_cube(cur_x, cur_y, 0, tw2, tl2, self.get_thickness())
                 cur_x += tw2 + self.spacing
 
             cur_y += tl2 + self.spacing
@@ -564,7 +567,6 @@ class archipack_floor(Manipulable, PropertyGroup):
               |____| 
         """
         cur_y = 0
-        th = self.thickness
         sp = self.spacing
 
         # movement variables
@@ -587,11 +589,11 @@ class archipack_floor(Manipulable, PropertyGroup):
                 if row == 0 or row == 1:
                     # adjust for if there is a need to cut off the bottom of the tile
                     if cur_y < 0:
-                        self.add_cube(cur_x, 0, 0, tw, tl + cur_y, th)  # large one
+                        self.add_cube(cur_x, 0, 0, tw, tl + cur_y, self.get_thickness())  # large one
                     else:
-                        self.add_cube(cur_x, cur_y, 0, tw, tl, th)  # large one
+                        self.add_cube(cur_x, cur_y, 0, tw, tl, self.get_thickness())  # large one
 
-                    self.add_cube(cur_x + tw + sp, cur_y + s_tl + sp, 0, s_tw, s_tl, th)  # small one
+                    self.add_cube(cur_x + tw + sp, cur_y + s_tl + sp, 0, s_tw, s_tl, self.get_thickness())  # small one
 
                     if step_back:
                         cur_x += tw + sp
@@ -603,13 +605,16 @@ class archipack_floor(Manipulable, PropertyGroup):
                     step_back = not step_back
                 else:
                     if cur_x == 0:  # half width for starting position
-                        self.add_cube(cur_x, cur_y, 0, s_tw, tl, th)  # large one
-                        self.add_cube(cur_x + s_tw + sp, cur_y + s_tl + sp, 0, s_tw, s_tl, th)  # small one on right
-                        self.add_cube(cur_x, cur_y - sp - s_tl, 0, s_tw, s_tl, th)  # small one on bottom
+                        self.add_cube(cur_x, cur_y, 0, s_tw, tl, self.get_thickness())  # large one
+                        # small one on right
+                        self.add_cube(cur_x + s_tw + sp, cur_y + s_tl + sp, 0, s_tw, s_tl, self.get_thickness())
+                        # small one on bottom
+                        self.add_cube(cur_x, cur_y - sp - s_tl, 0, s_tw, s_tl, self.get_thickness())
                         cur_x += (2 * s_tw) + tw + (3 * sp)
                     else:
-                        self.add_cube(cur_x, cur_y, 0, tw, tl, th)  # large one
-                        self.add_cube(cur_x + tw + sp, cur_y + s_tl + sp, 0, s_tw, s_tl, th)  # small one on right
+                        self.add_cube(cur_x, cur_y, 0, tw, tl, self.get_thickness())  # large one
+                        # small one on right
+                        self.add_cube(cur_x + tw + sp, cur_y + s_tl + sp, 0, s_tw, s_tl, self.get_thickness())
                         cur_x += (2 * tw) + (3*sp) + s_tw
 
             if row == 0 or row == 2:
@@ -629,7 +634,6 @@ class archipack_floor(Manipulable, PropertyGroup):
          __  __  __  __
         |__||__||__||__| Row of smalls
         """
-        th = self.thickness
         sp = self.spacing
         cur_y = 0.0
         row = 0
@@ -644,13 +648,13 @@ class archipack_floor(Manipulable, PropertyGroup):
 
             while cur_x < self.width:
                 if row == 0:  # large one then two small ones stacked beside it
-                    self.add_cube(cur_x, cur_y, 0, tw, tl, th)
-                    self.add_cube(cur_x + tw + sp, cur_y, 0, s_tw, s_tl, th)
-                    self.add_cube(cur_x + tw + sp, cur_y + s_tl + sp, 0, s_tw, s_tl, th)
+                    self.add_cube(cur_x, cur_y, 0, tw, tl, self.get_thickness())
+                    self.add_cube(cur_x + tw + sp, cur_y, 0, s_tw, s_tl, self.get_thickness())
+                    self.add_cube(cur_x + tw + sp, cur_y + s_tl + sp, 0, s_tw, s_tl, self.get_thickness())
                     cur_x += tw + s_tw + (2 * sp)
                 else:  # row of small ones
-                    self.add_cube(cur_x, cur_y, 0, s_tw, s_tl, th)
-                    self.add_cube(cur_x + s_tw + sp, cur_y, 0, s_tw, s_tl, th)
+                    self.add_cube(cur_x, cur_y, 0, s_tw, s_tl, self.get_thickness())
+                    self.add_cube(cur_x + s_tw + sp, cur_y, 0, s_tw, s_tl, self.get_thickness())
                     cur_x += tw + sp
 
             if row == 0:
@@ -667,7 +671,6 @@ class archipack_floor(Manipulable, PropertyGroup):
         /   \
         \___/ 
         """
-        th = self.thickness
         sp = self.spacing
         width = self.tile_width
         dia = (width / 2) / cos(radians(30))
@@ -685,7 +688,7 @@ class archipack_floor(Manipulable, PropertyGroup):
 
             while cur_x - width / 2 < self.width:  # place tile as long as left is still within bounds
                 segments = self.line_segments_from_points([(pt[0] + cur_x, pt[1] + cur_y) for pt in base_points])
-                self.add_board_from_boundaries(segments, th)
+                self.add_board_from_boundaries(segments, self.get_thickness())
 
                 cur_x += width + sp
 
@@ -700,7 +703,6 @@ class archipack_floor(Manipulable, PropertyGroup):
          ____ |  |
         |____||__|  
         """
-        th = self.thickness
         sp = self.spacing
 
         tw = self.tile_width
@@ -713,11 +715,11 @@ class archipack_floor(Manipulable, PropertyGroup):
             cur_x = 0
 
             while cur_x < self.width:
-                self.add_cube(cur_x, cur_y, 0, tw, s_tl, th)  # bottom
-                self.add_cube(cur_x + tw + sp, cur_y, 0, s_tw, tl, th)  # right
-                self.add_cube(cur_x + s_tw + sp, cur_y + tl + sp, 0, tw, s_tl, th)  # top
-                self.add_cube(cur_x, cur_y + s_tl + sp, 0, s_tw, tl, th)  # left
-                self.add_cube(cur_x + s_tw + sp, cur_y + s_tl + sp, 0, s_tw, s_tl, th)  # center
+                self.add_cube(cur_x, cur_y, 0, tw, s_tl, self.get_thickness())  # bottom
+                self.add_cube(cur_x + tw + sp, cur_y, 0, s_tw, tl, self.get_thickness())  # right
+                self.add_cube(cur_x + s_tw + sp, cur_y + tl + sp, 0, tw, s_tl, self.get_thickness())  # top
+                self.add_cube(cur_x, cur_y + s_tl + sp, 0, s_tw, tl, self.get_thickness())  # left
+                self.add_cube(cur_x + s_tw + sp, cur_y + s_tl + sp, 0, s_tw, s_tl, self.get_thickness())  # center
 
                 cur_x += tw + s_tw + (2*sp)
             cur_y += tl + s_tl + (2*sp)
@@ -728,7 +730,6 @@ class archipack_floor(Manipulable, PropertyGroup):
         |||
         """
         cur_x = 0.0
-        zt = self.thickness
         bw, bl = self.board_width, self.board_length
 
         while cur_x < self.width:
@@ -744,10 +745,6 @@ class archipack_floor(Manipulable, PropertyGroup):
 
             counter = 1
             while cur_y < self.length:
-                z = zt
-                if self.vary_thickness:
-                    v = z * 0.99 * (self.thickness_variance / 100)
-                    z = uniform(z - v, z + v)
                 bl2 = bl
                 if self.vary_length:
                     v = bl * (self.length_variance / 100) * 0.99
@@ -755,7 +752,7 @@ class archipack_floor(Manipulable, PropertyGroup):
                 if (counter >= self.max_boards and self.vary_length) or cur_y + bl2 > self.length:
                     bl2 = self.length - cur_y
 
-                self.add_cube(cur_x, cur_y, 0, bw2, bl2, z)
+                self.add_cube(cur_x, cur_y, 0, bw2, bl2, self.get_thickness())
                 cur_y += bl2 + self.length_spacing
                 counter += 1
 
@@ -769,7 +766,6 @@ class archipack_floor(Manipulable, PropertyGroup):
         --||--||
         """
         cur_x = 0.0
-        z = self.thickness
         start_orient_length = True
 
         # figure board width
@@ -785,7 +781,7 @@ class archipack_floor(Manipulable, PropertyGroup):
 
                     for i in range(self.boards_in_group):
                         if cur_x < self.width and cur_y < self.length:
-                            self.add_cube(cur_x, cur_y, 0, bw, bl, z)
+                            self.add_cube(cur_x, cur_y, 0, bw, bl, self.get_thickness())
                             cur_x += bw + self.spacing
 
                     cur_x = start_x
@@ -794,7 +790,7 @@ class archipack_floor(Manipulable, PropertyGroup):
                 else:
                     for i in range(self.boards_in_group):
                         if cur_x < self.width and cur_y < self.length:
-                            self.add_cube(cur_x, cur_y, 0, bl, bw, z)
+                            self.add_cube(cur_x, cur_y, 0, bl, bw, self.get_thickness())
                             cur_y += bw + self.spacing
 
                 orient_length = not orient_length
@@ -803,6 +799,9 @@ class archipack_floor(Manipulable, PropertyGroup):
             cur_x += bl + self.spacing
 
     def wood_herringbone(self):
+        """
+        Boards are at 45 degree angle, in chevron pattern, ends are angled 
+        """
         width_dif = self.board_width / cos(radians(45))
         x_dif = self.short_board_length * cos(radians(45))
         y_dif = self.short_board_length * sin(radians(45))
@@ -819,7 +818,7 @@ class archipack_floor(Manipulable, PropertyGroup):
                     [(cur_x, cur_y), (cur_x + x_dif, cur_y + y_dif),
                      (cur_x + x_dif, cur_y + total_y_dif), (cur_x, cur_y + width_dif)]
                 )
-                self.add_board_from_boundaries(board, self.thickness)
+                self.add_board_from_boundaries(board, self.get_thickness())
                 cur_x += x_dif + self.spacing
 
                 # right side
@@ -828,12 +827,16 @@ class archipack_floor(Manipulable, PropertyGroup):
                         [(cur_x, cur_y + y_dif), (cur_x + x_dif, cur_y),
                          (cur_x + x_dif, cur_y + width_dif), (cur_x, cur_y + total_y_dif)]
                     )
-                    self.add_board_from_boundaries(board, self.thickness)
+                    self.add_board_from_boundaries(board, self.get_thickness())
                     cur_x += x_dif + self.spacing
 
             cur_y += width_dif + sp_dif  # adjust spacing amount for 45 degree angle
 
+    # TODO: fix issue with only three corners be found when board size is small
     def wood_herringbone_parquet(self):
+        """
+        Boards are at 45 degree angle, in chevron pattern, ends are square, not angled
+        """
         x_dif = self.short_board_length * cos(radians(45))
         y_dif = self.short_board_length * sin(radians(45))
         y_dif_45 = self.board_width * cos(radians(45))
@@ -854,7 +857,7 @@ class archipack_floor(Manipulable, PropertyGroup):
                     [(cur_x, cur_y), (cur_x + x_dif, cur_y + y_dif),
                      (cur_x + x_dif - x_dif_45, cur_y + total_y_dif), (cur_x - x_dif_45, cur_y + y_dif_45)]
                 )
-                self.add_board_from_boundaries(board, self.thickness)
+                self.add_board_from_boundaries(board, self.get_thickness())
                 cur_x += x_dif - x_dif_45 + sp_dif
                 cur_y += y_dif - y_dif_45 - sp_dif
 
@@ -864,7 +867,7 @@ class archipack_floor(Manipulable, PropertyGroup):
                          (cur_x + x_dif + x_dif_45, cur_y - y_dif + y_dif_45),
                          (cur_x + x_dif_45, cur_y + y_dif_45)]
                     )
-                    self.add_board_from_boundaries(board, self.thickness)
+                    self.add_board_from_boundaries(board, self.get_thickness())
                     cur_x += x_dif + x_dif_45 + sp_dif
                     cur_y -= y_dif - y_dif_45 - sp_dif
 
@@ -1024,23 +1027,41 @@ class ARCHIPACK_PT_floor(Panel):
                     layout.prop(props, 'max_boards')
                 layout.separator()
 
+                # width
+                layout.prop(props, 'board_width')
+                # vary width
+                if props.wood_style == 'regular':
+                    layout.prop(props, 'vary_width', icon='RNDCURVE')
+                    if props.vary_width:
+                        layout.prop(props, 'width_variance')
+                    layout.separator()
+
                 layout.prop(props, 'length_spacing')
                 layout.prop(props, 'width_spacing')
                 layout.separator()
             else:
                 layout.prop(props, 'short_board_length')
 
-                if props.wood_style == 'herringbone_parquet':
-                    layout.prop(props, 'boards_in_group')
+                if props.wood_style != "square_parquet":
+                    layout.prop(props, "board_width")
+                layout.prop(props, "spacing")
 
-            # width
-            layout.prop(props, 'board_width')
-            # vary width
-            if props.wood_style == 'regular':
-                layout.prop(props, 'vary_width', icon='RNDCURVE')
-                if props.vary_width:
-                    layout.prop(props, 'width_variance')
-                layout.separator()
+                if props.wood_style == 'square_parquet':
+                    layout.prop(props, 'boards_in_group')
+        # tile
+        elif props.floor_material == "tile":
+            # width and length and mortar
+            layout.prop(props, "tile_length")
+            layout.prop(props, "tile_width")
+            layout.prop(props, "mortar_depth")
+            layout.separator()
+
+            if props.tile_style == "regular":
+                layout.prop(props, "random_offset", icon="RNDCURVE")
+                if props.random_offset:
+                    layout.prop(props, "offset_variance")
+                else:
+                    layout.prop(props, "offset")
 
         # updating
         layout.separator()

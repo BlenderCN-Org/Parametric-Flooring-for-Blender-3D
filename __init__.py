@@ -257,23 +257,14 @@ class archipack_floor(Manipulable, PropertyGroup):
         :param p4: another point on line 2
         :return: None if the lines are parallel, or (x, y) if they do intersect
         """
-        m1 = (p2[1] - p1[1]) / (p2[0] - p1[0]) if p2[0] - p1[0] != 0 else None
-        m2 = (p4[1] - p3[1]) / (p4[0] - p3[0]) if p4[0] - p3[0] != 0 else None
-        b1 = p2[1] - (m1 * p2[0]) if m1 is not None else 0
-        b2 = p4[1] - (m2 * p4[0]) if m2 is not None else 0
-
-        if m1 is None and m2 is None:  # both vertical lines
+        bottom = (p1[0] - p2[0]) * (p3[1] - p4[1]) - (p1[1] - p2[1]) * (p3[0] - p4[0])
+        part1, part2 = (p1[0] * p2[1] - p1[1] * p2[0]), (p3[0] * p4[1] - p3[1] * p4[0])
+        if bottom != 0:
+            x = (part1 * (p3[0] - p4[0]) - (p1[0] - p2[0]) * part2) / bottom
+            y = (part1 * (p3[1] - p4[1]) - (p1[1] - p2[1]) * part2) / bottom
+            return x, y
+        else:
             return None
-        elif m1 is None:  # m1 is vertical
-            return p1[0], (p1[0] * m2) + b2
-        elif m2 is None:  # m2 is vertical
-            return p3[0], (p3[0] * m1) + b1
-        elif m1 - m2 == 0:  # slopes are the same, won't intersect
-            return None
-
-        x = (b2 - b1) / (m1 - m2)
-        y = m1 * x + b1
-        return x, y
 
     @staticmethod
     def points_on_same_side_of_line_segment(pt1, pt2, line_segment) -> bool:
@@ -530,7 +521,7 @@ class archipack_floor(Manipulable, PropertyGroup):
                 point = self.point_of_intersection(segments[i][0], segments[i][1], segments[j][0], segments[j][1])
 
                 if point is not None:
-                    r_point = archipack_floor.round_tuple(tuple(point))
+                    r_point = self.round_tuple(tuple(point))
 
                     if r_point not in out and self.point_in_shape(r_point, shape, center):
                         out.append(r_point)

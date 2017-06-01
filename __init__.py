@@ -58,6 +58,7 @@ from .simple_manipulator import Manipulable
 FOOT = 0.3048  # 1 foot in meters
 INCH = 0.0254  # 1 inch in meters
 EQUAL, NOT_EQUAL, LESS_EQUAL, GREATER_EQUAL, LESS, GREATER = [i for i in range(6)]
+SLOP = 0.001  # amount of wiggle room in rough_comp
 
 # ------------------------------------------------------------------
 # Define property class to store object parameters and update mesh
@@ -246,6 +247,35 @@ class archipack_floor(Manipulable, PropertyGroup):
         return out
 
     @staticmethod
+    def point_of_intersection(p1, p2, p3, p4):
+        """
+        See if the lines containing [p1, p2] and [p3, p4] intersect. If they don't interest, aka they are parallel,
+        then None is returned, else the point of intersection is returned
+        :param p1: a point on line 1
+        :param p2: another point on line 1
+        :param p3: a point on line 2
+        :param p4: another point on line 2
+        :return: None if the lines are parallel, or (x, y) if they do intersect
+        """
+        m1 = (p2[1] - p1[1]) / (p2[0] - p1[0]) if p2[0] - p1[0] != 0 else None
+        m2 = (p4[1] - p3[1]) / (p4[0] - p3[0]) if p4[0] - p3[0] != 0 else None
+        b1 = p2[1] - (m1 * p2[0]) if m1 is not None else 0
+        b2 = p4[1] - (m2 * p4[0]) if m2 is not None else 0
+
+        if m1 is None and m2 is None:  # both vertical lines
+            return None
+        elif m1 is None:  # m1 is vertical
+            return p1[0], (p1[0] * m2) + b2
+        elif m2 is None:  # m2 is vertical
+            return p3[0], (p3[0] * m1) + b1
+        elif m1 - m2 == 0:  # slopes are the same, won't intersect
+            return None
+
+        x = (b2 - b1) / (m1 - m2)
+        y = m1 * x + b1
+        return x, y
+
+    @staticmethod
     def points_on_same_side_of_line_segment(pt1, pt2, line_segment) -> bool:
         """
         Check if pt1 and pt2 are on the same side of the line formed by line_segment. Do this by finding the y
@@ -300,13 +330,13 @@ class archipack_floor(Manipulable, PropertyGroup):
         """
 
         # if allows equality
-        if comp in (EQUAL, LESS_EQUAL, GREATER_EQUAL) and isclose(val1, val2, abs_tol=0.001):
+        if comp in (EQUAL, LESS_EQUAL, GREATER_EQUAL) and isclose(val1, val2, abs_tol=SLOP):
             return True
-        elif comp == NOT_EQUAL and not isclose(val1, val2, abs_tol=0.001):
+        elif comp == NOT_EQUAL and not isclose(val1, val2, abs_tol=SLOP):
             return True
 
         # check inequalities with equality
-        upper, lower = val2 - 0.001, val2 + 0.001  # allow a spread of values for the regular inequalities
+        upper, lower = val2 - SLOP, val2 + SLOP  # allow a spread of values for the regular inequalities
 
         if comp == LESS_EQUAL and val1 < val2:
             return True
@@ -457,6 +487,27 @@ class archipack_floor(Manipulable, PropertyGroup):
     def add_cube_mat_ids(self, mat_id=0):
         self.append_all(self.ms, [mat_id]*6)
 
+    def add_slop(self, seg, seg2):
+        if seg[0][1] != seg[1][1]:  # not vertical
+            line = self.line_from_points(seg[0], seg[1])
+            if seg[0][0] < seg[1][0]:
+                seg = [(seg[0][0] - SLOP, line(seg[0][0] - SLOP)), (seg[1][0] + SLOP, line(seg[1][0] + SLOP))]
+            else:
+                seg = [(seg[1][0] - SLOP, line(seg[1][0] - SLOP)), (seg[0][0] + SLOP, line(seg[0][0] + SLOP))]
+        else:
+            if seg[0][1] < seg[1][1]:
+                seg = [(seg[0][0], seg[0][1] - SLOP), (seg[1][0], seg[1][1] + SLOP)]
+            else:
+                seg = [(seg[0][0], seg[0][1] - SLOP), (seg[1][0], seg[1][1] + SLOP)]
+
+        line = self.line_from_points(seg2[0], seg2[1])
+        if seg2[0][0] < seg2[1][0]:
+            seg2 = [(seg2[0][0] - SLOP, line(seg2[0][0] - SLOP)), (seg2[1][0] + SLOP, line(seg2[1][0] + SLOP))]
+        else:
+            seg2 = [(seg2[1][0] - SLOP, line(seg2[1][0] - SLOP)), (seg2[0][0] + SLOP, line(seg2[0][0] + SLOP))]
+
+        return seg, seg2
+
     def add_manipulator(self, name, pt1, pt2, pt3):
         m = self.manipulators.add()
         m.prop1_name = name
@@ -476,8 +527,7 @@ class archipack_floor(Manipulable, PropertyGroup):
         # for every segment, intersect it with every other segment
         for i in range(0, len(segments) - 1):
             for j in range(i + 1, len(segments)):
-                point = mathutils.geometry.intersect_line_line_2d(segments[i][0], segments[i][1], segments[j][0],
-                                                                  segments[j][1])
+                point = self.point_of_intersection(segments[i][0], segments[i][1], segments[j][0], segments[j][1])
 
                 if point is not None:
                     r_point = archipack_floor.round_tuple(tuple(point))
@@ -508,6 +558,9 @@ class archipack_floor(Manipulable, PropertyGroup):
                 and self.rough_comp(point[0], self.width, LESS_EQUAL)
                 and self.rough_comp(point[1], 0, GREATER_EQUAL)
                 and self.rough_comp(point[1], self.length, LESS_EQUAL)):
+            with open('D:/test.txt', 'a') as f:
+                f.write("Point: {}\n".format(point))
+                # f.write("Seg: {}\n\n".format(seg))
             return False
 
         # go through each line segment and make sure point is on the same side as the center

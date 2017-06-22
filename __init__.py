@@ -411,7 +411,14 @@ class archipack_floor(Manipulable, PropertyGroup):
         if len(corners) < 3:  # there needs to be at least three corners
             return
 
-        points = archipack_floor.sort_corner_points(corners, center)
+        # corners center - use to sort points because sometimes center from above is outside shape and it won't sort
+        points_center = [0, 0]
+        for i in corners:
+            points_center[0] += i[0]
+            points_center[1] += i[1]
+        points_center = [i / len(corners) for i in points_center]
+
+        points = archipack_floor.sort_corner_points(corners, points_center)
 
         p = len(self.vs)
         f = len(self.fs)
@@ -877,7 +884,6 @@ class archipack_floor(Manipulable, PropertyGroup):
 
             cur_y += width_dif + sp_dif  # adjust spacing amount for 45 degree angle
 
-    # TODO: fix issue with only three corners be found when board size is small
     def wood_herringbone_parquet(self):
         """
         Boards are at 45 degree angle, in chevron pattern, ends are square, not angled

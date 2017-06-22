@@ -257,14 +257,14 @@ class archipack_floor(Manipulable, PropertyGroup):
         :param p4: another point on line 2
         :return: None if the lines are parallel, or (x, y) if they do intersect
         """
-        bottom = (p1[0] - p2[0]) * (p3[1] - p4[1]) - (p1[1] - p2[1]) * (p3[0] - p4[0])
+        denominator = (p1[0] - p2[0]) * (p3[1] - p4[1]) - (p1[1] - p2[1]) * (p3[0] - p4[0])
         part1, part2 = (p1[0] * p2[1] - p1[1] * p2[0]), (p3[0] * p4[1] - p3[1] * p4[0])
-        if bottom != 0:
-            x = (part1 * (p3[0] - p4[0]) - (p1[0] - p2[0]) * part2) / bottom
-            y = (part1 * (p3[1] - p4[1]) - (p1[1] - p2[1]) * part2) / bottom
-            return x, y
-        else:
+        if denominator == 0:
             return None
+        else:
+            x = (part1 * (p3[0] - p4[0]) - (p1[0] - p2[0]) * part2) / denominator
+            y = (part1 * (p3[1] - p4[1]) - (p1[1] - p2[1]) * part2) / denominator
+            return x, y
 
     @staticmethod
     def points_on_same_side_of_line_segment(pt1, pt2, line_segment) -> bool:
@@ -412,6 +412,7 @@ class archipack_floor(Manipulable, PropertyGroup):
             points_center[1] += i[1]
         points_center = [i / len(corners) for i in points_center]
 
+        # sort corner points
         points = archipack_floor.sort_corner_points(corners, points_center)
 
         p = len(self.vs)
@@ -527,9 +528,6 @@ class archipack_floor(Manipulable, PropertyGroup):
                 and self.rough_comp(point[0], self.width, LESS_EQUAL)
                 and self.rough_comp(point[1], 0, GREATER_EQUAL)
                 and self.rough_comp(point[1], self.length, LESS_EQUAL)):
-            with open('D:/test.txt', 'a') as f:
-                f.write("Point: {}\n".format(point))
-                # f.write("Seg: {}\n\n".format(seg))
             return False
 
         # go through each line segment and make sure point is on the same side as the center

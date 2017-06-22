@@ -485,27 +485,6 @@ class archipack_floor(Manipulable, PropertyGroup):
     def add_cube_mat_ids(self, mat_id=0):
         self.append_all(self.ms, [mat_id]*6)
 
-    def add_slop(self, seg, seg2):
-        if seg[0][1] != seg[1][1]:  # not vertical
-            line = self.line_from_points(seg[0], seg[1])
-            if seg[0][0] < seg[1][0]:
-                seg = [(seg[0][0] - SLOP, line(seg[0][0] - SLOP)), (seg[1][0] + SLOP, line(seg[1][0] + SLOP))]
-            else:
-                seg = [(seg[1][0] - SLOP, line(seg[1][0] - SLOP)), (seg[0][0] + SLOP, line(seg[0][0] + SLOP))]
-        else:
-            if seg[0][1] < seg[1][1]:
-                seg = [(seg[0][0], seg[0][1] - SLOP), (seg[1][0], seg[1][1] + SLOP)]
-            else:
-                seg = [(seg[0][0], seg[0][1] - SLOP), (seg[1][0], seg[1][1] + SLOP)]
-
-        line = self.line_from_points(seg2[0], seg2[1])
-        if seg2[0][0] < seg2[1][0]:
-            seg2 = [(seg2[0][0] - SLOP, line(seg2[0][0] - SLOP)), (seg2[1][0] + SLOP, line(seg2[1][0] + SLOP))]
-        else:
-            seg2 = [(seg2[1][0] - SLOP, line(seg2[1][0] - SLOP)), (seg2[0][0] + SLOP, line(seg2[0][0] + SLOP))]
-
-        return seg, seg2
-
     def add_manipulator(self, name, pt1, pt2, pt3):
         m = self.manipulators.add()
         m.prop1_name = name

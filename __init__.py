@@ -343,10 +343,6 @@ class archipack_floor(Manipulable, PropertyGroup):
         return False
 
     @staticmethod
-    def round_tuple(tup, digits=4):
-        return tuple([round(i, digits) for i in tup])
-
-    @staticmethod
     def sort_corner_points(points, center):
         """
         Sort corner points so they are in a counter-clockwise order, do this by using the center and the angle
@@ -398,7 +394,7 @@ class archipack_floor(Manipulable, PropertyGroup):
         for seg in shape:
             center += mathutils.Vector(seg[0])
             center += mathutils.Vector(seg[1])
-        center = archipack_floor.round_tuple(tuple(center / (2 * len(shape)))) if len(shape) != 0 else (0, 0)
+        center = tuple(center / (2 * len(shape))) if len(shape) != 0 else (0, 0)
 
         outer_boundaries = [((0, 0), (0, self.length)), ((0, 0), (self.width, 0)),
                             ((self.width, 0), (self.width, self.length)),
@@ -505,10 +501,8 @@ class archipack_floor(Manipulable, PropertyGroup):
                 point = self.point_of_intersection(segments[i][0], segments[i][1], segments[j][0], segments[j][1])
 
                 if point is not None:
-                    r_point = self.round_tuple(tuple(point))
-
-                    if r_point not in out and self.point_in_shape(r_point, shape, center):
-                        out.append(r_point)
+                    if point not in out and self.point_in_shape(point, shape, center):
+                        out.append(point)
         return out
 
     def get_thickness(self):
@@ -861,6 +855,7 @@ class archipack_floor(Manipulable, PropertyGroup):
 
             cur_y += width_dif + sp_dif  # adjust spacing amount for 45 degree angle
 
+    # TODO: does not seem to be stepping correctly, odd triangles on right side
     def wood_herringbone_parquet(self):
         """
         Boards are at 45 degree angle, in chevron pattern, ends are square, not angled

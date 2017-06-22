@@ -383,6 +383,7 @@ class archipack_floor(Manipulable, PropertyGroup):
 
         return [i[1] for i in sorted_]
 
+    # TODO: speed up adding a board from boundaries
     def add_board_from_boundaries(self, shape, th, mat_id=0):
         """
         Add a board from boundary segments using the intersection of the segments as the corner points as long
@@ -391,8 +392,6 @@ class archipack_floor(Manipulable, PropertyGroup):
         :param th: The thickness of the board
         :param mat_id: The material id to use for the board        
         """
-        # round off all of the shape points to prevent floating point errors
-        shape = [(archipack_floor.round_tuple(i[0]), archipack_floor.round_tuple(i[1])) for i in shape]
 
         # shape center
         center = mathutils.Vector((0, 0))
@@ -401,10 +400,9 @@ class archipack_floor(Manipulable, PropertyGroup):
             center += mathutils.Vector(seg[1])
         center = archipack_floor.round_tuple(tuple(center / (2 * len(shape)))) if len(shape) != 0 else (0, 0)
 
-        outer_boundaries = [(archipack_floor.round_tuple(i[0]), archipack_floor.round_tuple(i[1]))
-                            for i in [[(0, 0), (0, self.length)], [(0, 0), (self.width, 0)],
-                                      [(self.width, 0), (self.width, self.length)],
-                                      [(self.width, self.length), (0, self.length)]]]
+        outer_boundaries = [((0, 0), (0, self.length)), ((0, 0), (self.width, 0)),
+                            ((self.width, 0), (self.width, self.length)),
+                            ((self.width, self.length), (0, self.length))]
 
         corners = self.corner_points_from_boundaries(outer_boundaries + shape, shape, center)  # find the corner points
 

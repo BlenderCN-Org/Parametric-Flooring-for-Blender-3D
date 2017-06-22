@@ -231,11 +231,6 @@ class archipack_floor(Manipulable, PropertyGroup):
             v_list.append(i)
 
     @staticmethod
-    def line_from_points(pt1, pt2) -> callable:
-        slope = (pt2[1] - pt1[1]) / (pt2[0] - pt1[0]) if (pt2[0] - pt1[0]) != 0 else 0
-        return lambda x: slope * (x - pt1[0]) + pt1[1]
-
-    @staticmethod
     def line_segments_from_points(points):
         """
         Create line segments from the points listed
@@ -279,9 +274,15 @@ class archipack_floor(Manipulable, PropertyGroup):
         """
         cl = archipack_floor
 
-        line = archipack_floor.line_from_points(line_segment[0], line_segment[1])  # create a line function
-        y1 = round(line(pt1[0]), 4)  # what the y-value on the line is for the x-value of the first point
-        y2 = round(line(pt2[0]), 4)  # what the y-value on the line is for the x-value of the second point
+        # calculate slope
+        if line_segment[1][0] - line_segment[0][0] == 0:
+            slope = 0
+        else:
+            slope = (line_segment[1][1] - line_segment[0][1]) / (line_segment[1][0] - line_segment[0][0])
+
+        # determine y-values for each point
+        y1 = slope * (pt1[0] - line_segment[0][0]) + line_segment[0][1]
+        y2 = slope * (pt2[0] - line_segment[0][0]) + line_segment[0][1]
 
         if cl.rough_comp(line_segment[0][0], line_segment[1][0], EQUAL):  # vertical line
             if cl.rough_comp(pt1[0], line_segment[0][0], GREATER_EQUAL) \
@@ -686,6 +687,7 @@ class archipack_floor(Manipulable, PropertyGroup):
 
             row = (row + 1) % 2
 
+    # TODO: vertex order doesn't seem consistent so faces get criss-cross sometimes
     def tile_hexagon(self):
         """
           __  Hexagon tiles

@@ -454,7 +454,7 @@ class archipack_floor(Manipulable, PropertyGroup):
         # uv unwrap
         faces.append(top_face)
         faces.append(bottom_face)
-        self.uv_unwrap(faces)
+        self.uv_unwrap(faces, points_center + [0])
 
     def add_cube(self, x, y, z, w, l, t, clip=True, mat_id=0):
         """
@@ -479,16 +479,16 @@ class archipack_floor(Manipulable, PropertyGroup):
 
         self.append_all(self.vs, [(x, y, z), (x, y, z + t), (x + w, y, z), (x + w, y, z + t), (x, y + l, z),
                                   (x, y + l, z + t), (x + w, y + l, z), (x + w, y + l, z + t)])
-        self.add_cube_faces()
+        self.add_cube_faces([x + w / 2, y + l / 2, z])
         self.add_cube_mat_ids(mat_id)
 
-    def add_cube_faces(self):
+    def add_cube_faces(self, board_center):
         p = len(self.vs) - 8
         faces = [(p, p + 2, p + 3, p + 1), (p + 2, p + 6, p + 7, p + 3), (p + 1, p + 3, p + 7, p + 5),
                  (p + 6, p + 4, p + 5, p + 7), (p, p + 1, p + 5, p + 4), (p, p + 4, p + 6, p + 2)]
         self.append_all(self.fs, faces)
 
-        self.uv_unwrap(faces)
+        self.uv_unwrap(faces, board_center)
 
     def add_cube_mat_ids(self, mat_id=0):
         self.append_all(self.ms, [mat_id]*6)
@@ -908,17 +908,52 @@ class archipack_floor(Manipulable, PropertyGroup):
 
             cur_y = pre_y + width_dif + (2*sp_dif)
 
-    def uv_unwrap(self, faces):
+    # TODO: fix issue with bottom face not being oriented properly
+    def uv_unwrap(self, faces, board_center):
+        board_center = mathutils.Vector(board_center)
+
         for face in faces:
             vertices = [self.vs[i] for i in face]
 
             vertical_face = False
+            th = 0
             for i in range(len(vertices) - 1):
                 if vertices[i][2] - vertices[i + 1][2] != 0:  # they have different z values so face is vertical
                     vertical_face = True
+                    th = max(vertices[i][2], vertices[i + 1][2])
 
             if vertical_face:
-                pass
+                origin = mathutils.Vector(vertices[0])
+                v1 = mathutils.Vector(vertices[1]) - origin
+                v2 = mathutils.Vector(vertices[2]) - origin
+
+                # normal
+                normal = v1.cross(v2)
+                if (normal + origin - board_center).length < (-normal + origin - board_center).length:
+                    normal.negate()
+                normal.resize_2d()
+
+                # get angle between normal and x-axis
+                if normal[0] != 0:
+                    theta = atan(normal[1] / normal[0])
+                else:
+                    theta = radians(90)
+
+                if normal[0] < 0 or (normal[0] <= 0 and normal[1] < 0):
+                    theta += radians(180)
+                elif normal[1] < 0:
+                    theta += radians(360)
+
+                # find x and y dif values to "fold out" bottom vertices
+                x_dif, y_dif = th * cos(theta), th * sin(theta)
+                face_uvs = []
+
+                for vertex in vertices:
+                    if vertex[2] == 0:
+                        face_uvs.append(((vertex[0] + x_dif) * self.uv_factor, (vertex[1] + y_dif) * self.uv_factor))
+                    else:
+                        face_uvs.append((vertex[0] * self.uv_factor, vertex[1] * self.uv_factor))
+                self.us.append(face_uvs)
             else:
                 self.us.append([(vertex[0] * self.uv_factor, vertex[1] * self.uv_factor) for vertex in vertices])
 

@@ -225,6 +225,8 @@ class archipack_floor(Manipulable, PropertyGroup):
         precision=2, description='How much to vary the offset each row of tiles'
     )
 
+    # materials
+
     @staticmethod
     def append_all(v_list, add):
         for i in add:
@@ -853,7 +855,6 @@ class archipack_floor(Manipulable, PropertyGroup):
 
             cur_y += width_dif + sp_dif  # adjust spacing amount for 45 degree angle
 
-    # TODO: does not seem to be stepping correctly, odd triangles on right side
     def wood_herringbone_parquet(self):
         """
         Boards are at 45 degree angle, in chevron pattern, ends are square, not angled
@@ -891,6 +892,8 @@ class archipack_floor(Manipulable, PropertyGroup):
                     self.add_board_from_boundaries(board, self.get_thickness())
                     cur_x += x_dif + x_dif_45 + sp_dif
                     cur_y -= y_dif - y_dif_45 - sp_dif
+                else:  # we didn't place the right board, so step ahead far enough the the while loop for x breaks
+                    cur_x = self.width + x_dif_45
 
             cur_y = pre_y + width_dif + (2*sp_dif)
 

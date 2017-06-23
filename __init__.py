@@ -73,7 +73,8 @@ def update(self, context):
 class archipack_floor(Manipulable, PropertyGroup):
     # keep track of data
     vs, fs = [], []  # vertices and faces
-    ms = []  # mat ids
+    ms, us = [], []  # mat ids and uvs
+    uv_factor = 1  # uv scale factor
 
     auto_update = BoolProperty(
         name="Auto Update Mesh", default=True, update=update,
@@ -225,7 +226,10 @@ class archipack_floor(Manipulable, PropertyGroup):
         precision=2, description='How much to vary the offset each row of tiles'
     )
 
-    # materials
+    # UV stuff
+    random_uvs = BoolProperty(
+        name='Random UV\'s', update=update, default=True, description='Random UV positions for the faces'
+    )
 
     @staticmethod
     def append_all(v_list, add):
@@ -474,10 +478,39 @@ class archipack_floor(Manipulable, PropertyGroup):
         self.add_cube_faces()
         self.add_cube_mat_ids(mat_id)
 
-    def add_cube_faces(self):
+    # TODO: handle random uvs
+    def add_cube_faces(self, add_uvs=True):
         p = len(self.vs) - 8
-        self.append_all(self.fs, [(p, p + 2, p + 3, p + 1), (p + 2, p + 6, p + 7, p + 3), (p + 1, p + 3, p + 7, p + 5),
-                                  (p + 6, p + 4, p + 5, p + 7), (p, p + 1, p + 5, p + 4), (p, p + 4, p + 6, p + 2)])
+        faces = [(p, p + 2, p + 3, p + 1), (p + 2, p + 6, p + 7, p + 3), (p + 1, p + 3, p + 7, p + 5),
+                 (p + 6, p + 4, p + 5, p + 7), (p, p + 1, p + 5, p + 4), (p, p + 4, p + 6, p + 2)]
+        self.append_all(self.fs, faces)
+
+        # handle uvs
+        if add_uvs:
+            for face in faces:
+                vertices = [self.vs[i] for i in face]
+
+                # determine if face is vertical, and if so, is it oriented along x or y axis
+                z_dif = False
+                y_dif = False
+                for i in range(len(vertices) - 1):
+                    if vertices[i][2] - vertices[i + 1][2] != 0:  # two different z values
+                        z_dif = True
+                    if vertices[i][1] - vertices[i + 1][1] != 0:  # two different y values
+                        y_dif = True
+
+                # add z value of vertex in direction orthogonal (perpendicular) to how the face is oriented
+                if z_dif:
+                    if y_dif:
+                        face_uvs = [((vertex[0] + vertex[2]) * self.uv_factor, vertex[1] * self.uv_factor)
+                                    for vertex in vertices]
+                    else:
+                        face_uvs = [(vertex[0] * self.uv_factor, (vertex[1] + vertex[2]) * self.uv_factor)
+                                    for vertex in vertices]
+                else:
+                    face_uvs = [(vertex[0] * self.uv_factor, vertex[1] * self.uv_factor) for vertex in vertices]
+
+                self.us.append(face_uvs)
 
     def add_cube_mat_ids(self, mat_id=0):
         self.append_all(self.ms, [mat_id]*6)
@@ -899,7 +932,8 @@ class archipack_floor(Manipulable, PropertyGroup):
 
     def update_data(self):
         # clear data before refreshing it
-        self.vs, self.fs, self.ms = [], [], []
+        self.vs, self.fs, self.ms, self.us = [], [], [], []
+        self.uv_factor = 1 / max(self.width, self.length)  # automatically scale to keep within reasonable bounds
 
         if self.floor_material == "wood":
             if self.wood_style == "regular":
@@ -969,7 +1003,7 @@ class archipack_floor(Manipulable, PropertyGroup):
 
     @property
     def uvs(self):
-        return []
+        return self.us
 
     @property
     def matids(self):
@@ -987,7 +1021,7 @@ class archipack_floor(Manipulable, PropertyGroup):
         context.scene.objects.active = o
 
         self.update_data()  # update vertices and faces
-        BmeshEdit.buildmesh(context, o, self.verts, self.faces, matids=self.matids)  # , uvs=self.uvs)
+        BmeshEdit.buildmesh(context, o, self.verts, self.faces, matids=self.matids, uvs=self.uvs)
 
         # update manipulators
         self.update_manipulators()

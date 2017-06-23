@@ -380,7 +380,6 @@ class archipack_floor(Manipulable, PropertyGroup):
 
         return [i[1] for i in sorted_]
 
-    # TODO: speed up adding a board from boundaries
     def add_board_from_boundaries(self, shape, th, mat_id=0):
         """
         Add a board from boundary segments using the intersection of the segments as the corner points as long

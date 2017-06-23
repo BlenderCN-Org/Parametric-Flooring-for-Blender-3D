@@ -430,11 +430,10 @@ class archipack_floor(Manipulable, PropertyGroup):
 
         # add faces
         start_p = p
-        top_face = []
-        bottom_face = []
+        faces, top_face, bottom_face = [], [], []
 
         for i in range(len(points) - 1):  # most of the edge faces
-            self.fs.append((p, p + 2, p + 3, p + 1))
+            faces.append([p, p + 2, p + 3, p + 1])
             top_face.append(p)
             bottom_face.append(p + 1)
             p += 2
@@ -442,15 +441,20 @@ class archipack_floor(Manipulable, PropertyGroup):
         # add last two vertices
         top_face.append(p)
         bottom_face.append(p + 1)
+        self.append_all(self.fs, faces)
 
-        # final side face
-        self.fs.append((p, start_p, start_p + 1, p + 1))
+        self.fs.append((p, start_p, start_p + 1, p + 1))  # final side face
         top_face.reverse()  # reverse to get normals right
         self.fs.append(top_face)
         self.fs.append(bottom_face)
 
         for i in range(len(self.fs) - f):  # at material ids
             self.ms.append(mat_id)
+
+        # uv unwrap
+        faces.append(top_face)
+        faces.append(bottom_face)
+        self.uv_unwrap(faces)
 
     def add_cube(self, x, y, z, w, l, t, clip=True, mat_id=0):
         """
@@ -478,39 +482,13 @@ class archipack_floor(Manipulable, PropertyGroup):
         self.add_cube_faces()
         self.add_cube_mat_ids(mat_id)
 
-    # TODO: handle random uvs
-    def add_cube_faces(self, add_uvs=True):
+    def add_cube_faces(self):
         p = len(self.vs) - 8
         faces = [(p, p + 2, p + 3, p + 1), (p + 2, p + 6, p + 7, p + 3), (p + 1, p + 3, p + 7, p + 5),
                  (p + 6, p + 4, p + 5, p + 7), (p, p + 1, p + 5, p + 4), (p, p + 4, p + 6, p + 2)]
         self.append_all(self.fs, faces)
 
-        # handle uvs
-        if add_uvs:
-            for face in faces:
-                vertices = [self.vs[i] for i in face]
-
-                # determine if face is vertical, and if so, is it oriented along x or y axis
-                z_dif = False
-                y_dif = False
-                for i in range(len(vertices) - 1):
-                    if vertices[i][2] - vertices[i + 1][2] != 0:  # two different z values
-                        z_dif = True
-                    if vertices[i][1] - vertices[i + 1][1] != 0:  # two different y values
-                        y_dif = True
-
-                # add z value of vertex in direction orthogonal (perpendicular) to how the face is oriented
-                if z_dif:
-                    if y_dif:
-                        face_uvs = [((vertex[0] + vertex[2]) * self.uv_factor, vertex[1] * self.uv_factor)
-                                    for vertex in vertices]
-                    else:
-                        face_uvs = [(vertex[0] * self.uv_factor, (vertex[1] + vertex[2]) * self.uv_factor)
-                                    for vertex in vertices]
-                else:
-                    face_uvs = [(vertex[0] * self.uv_factor, vertex[1] * self.uv_factor) for vertex in vertices]
-
-                self.us.append(face_uvs)
+        self.uv_unwrap(faces)
 
     def add_cube_mat_ids(self, mat_id=0):
         self.append_all(self.ms, [mat_id]*6)
@@ -929,6 +907,20 @@ class archipack_floor(Manipulable, PropertyGroup):
                     cur_x = self.width + x_dif_45
 
             cur_y = pre_y + width_dif + (2*sp_dif)
+
+    def uv_unwrap(self, faces):
+        for face in faces:
+            vertices = [self.vs[i] for i in face]
+
+            vertical_face = False
+            for i in range(len(vertices) - 1):
+                if vertices[i][2] - vertices[i + 1][2] != 0:  # they have different z values so face is vertical
+                    vertical_face = True
+
+            if vertical_face:
+                pass
+            else:
+                self.us.append([(vertex[0] * self.uv_factor, vertex[1] * self.uv_factor) for vertex in vertices])
 
     def update_data(self):
         # clear data before refreshing it

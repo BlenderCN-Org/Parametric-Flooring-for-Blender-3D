@@ -362,10 +362,10 @@ class archipack_floor(Manipulable, PropertyGroup):
             else:
                 ang = radians(90)
 
-            if pt[0] < center[0]:
+            if pt[0] < center[0] or (pt[0] <= center[0] and pt[1] < center[1]):
                 ang += radians(180)
             elif pt[1] < center[1]:
-                ang += 360
+                ang += radians(360)
 
             unsorted.append([ang, pt])
 
@@ -687,7 +687,6 @@ class archipack_floor(Manipulable, PropertyGroup):
 
             row = (row + 1) % 2
 
-    # TODO: vertex order doesn't seem consistent so faces get criss-cross sometimes
     def tile_hexagon(self):
         """
           __  Hexagon tiles

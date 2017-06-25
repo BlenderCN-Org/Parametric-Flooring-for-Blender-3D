@@ -47,9 +47,10 @@ from bpy.types import Operator, PropertyGroup, Mesh, Panel
 from bpy.props import FloatProperty, CollectionProperty, BoolProperty, IntProperty, EnumProperty
 from mathutils import Vector
 from random import uniform
-from math import radians, cos, sin, atan, isclose
+from math import radians, cos, sin, atan
 from .bmesh_utils import BmeshEdit as BmeshHelper
 from .simple_manipulator import Manipulable
+import bmesh
 
 # ------------------------------------------------------------------
 # Constants
@@ -782,6 +783,27 @@ class archipack_floor(Manipulable, PropertyGroup):
             BmeshHelper.bissect(context, o, Vector((0, self.length, 0)), Vector((0, 1, 0)))  # top
             BmeshHelper.bissect(context, o, Vector((0, 0, 0)), Vector((-1, 0, 0)))  # left
             BmeshHelper.bissect(context, o, Vector((self.width, 0, 0)), Vector((1, 0, 0)))  # right
+
+        bm = bmesh.new()
+        bm.from_mesh(o.data)
+        bm.verts.ensure_lookup_table()
+
+        # extrude
+        bmesh.ops.solidify(bm, geom=bm.faces, thickness=1)
+        bm.verts.ensure_lookup_table()
+        bm.faces.ensure_lookup_table()
+
+        # thickness
+        for face in bm.faces:
+            if face.verts[0].co.z > 0.9:  # the thickness above is one, allow for some rounding error
+                z = self.get_thickness()
+                for vert in face.verts:
+                    bm.verts[vert.index].co.z = z
+
+                # bevel here if needed
+
+        bm.to_mesh(o.data)
+        bm.free()
 
         # update manipulators
         self.update_manipulators()

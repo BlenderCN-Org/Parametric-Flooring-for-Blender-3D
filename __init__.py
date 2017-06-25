@@ -48,7 +48,7 @@ from bpy.props import FloatProperty, CollectionProperty, BoolProperty, IntProper
 import mathutils
 from random import uniform
 from math import radians, cos, sin, atan, isclose
-from .bmesh_utils import BmeshEdit
+from .bmesh_utils import BmeshEdit as BmeshHelper
 from .simple_manipulator import Manipulable
 
 # ------------------------------------------------------------------
@@ -237,76 +237,6 @@ class archipack_floor(Manipulable, PropertyGroup):
             v_list.append(i)
 
     @staticmethod
-    def line_segments_from_points(points):
-        """
-        Create line segments from the points listed
-        :param points: point to form line segments [p1, p2, p3...]
-        :return: line segments [[p1, p2], [p2, p3]...[pn, p1]]
-        """
-        out = [[points[i], points[i + 1]] for i in range(len(points) - 1)]
-        out.append([points[len(points) - 1], points[0]])
-        return out
-
-    @staticmethod
-    def point_of_intersection(p1, p2, p3, p4):
-        """
-        See if the lines containing [p1, p2] and [p3, p4] intersect. If they don't interest, aka they are parallel,
-        then None is returned, else the point of intersection is returned
-        :param p1: a point on line 1
-        :param p2: another point on line 1
-        :param p3: a point on line 2
-        :param p4: another point on line 2
-        :return: None if the lines are parallel, or (x, y) if they do intersect
-        """
-        denominator = (p1[0] - p2[0]) * (p3[1] - p4[1]) - (p1[1] - p2[1]) * (p3[0] - p4[0])
-        part1, part2 = (p1[0] * p2[1] - p1[1] * p2[0]), (p3[0] * p4[1] - p3[1] * p4[0])
-        if denominator == 0:
-            return None
-        else:
-            x = (part1 * (p3[0] - p4[0]) - (p1[0] - p2[0]) * part2) / denominator
-            y = (part1 * (p3[1] - p4[1]) - (p1[1] - p2[1]) * part2) / denominator
-            return x, y
-
-    @staticmethod
-    def points_on_same_side_of_line_segment(pt1, pt2, line_segment) -> bool:
-        """
-        Check if pt1 and pt2 are on the same side of the line formed by line_segment. Do this by finding the y
-        value that each point should be at, then checking how their actual y values compare to where they should be.
-        Make sure they are both either <= or >=. Also, if line is vertical, make compare x-values
-        :param pt1: first point
-        :param pt2: second point
-        :param line_segment: line segment to check pt1 and pt2 against
-        :return: 
-        """
-        cl = archipack_floor
-
-        # calculate slope
-        if line_segment[1][0] - line_segment[0][0] == 0:
-            slope = 0
-        else:
-            slope = (line_segment[1][1] - line_segment[0][1]) / (line_segment[1][0] - line_segment[0][0])
-
-        # determine y-values for each point
-        y1 = slope * (pt1[0] - line_segment[0][0]) + line_segment[0][1]
-        y2 = slope * (pt2[0] - line_segment[0][0]) + line_segment[0][1]
-
-        if cl.rough_comp(line_segment[0][0], line_segment[1][0], EQUAL):  # vertical line
-            if cl.rough_comp(pt1[0], line_segment[0][0], GREATER_EQUAL) \
-                    and cl.rough_comp(pt2[0], line_segment[0][0], GREATER_EQUAL):  # to the right of the line
-                return True
-            elif cl.rough_comp(pt1[0], line_segment[0][0], LESS_EQUAL) \
-                    and cl.rough_comp(pt2[0], line_segment[0][0], LESS_EQUAL):  # to the left of the line
-                return True
-        # both points are below or on line
-        elif cl.rough_comp(pt1[1], y1, LESS_EQUAL) and cl.rough_comp(pt2[1], y2, LESS_EQUAL):
-            return True
-        # both points are above line
-        elif cl.rough_comp(pt1[1], y1, GREATER_EQUAL) and cl.rough_comp(pt2[1], y2, GREATER_EQUAL):
-            return True
-
-        return False
-
-    @staticmethod
     def rotate_point(point, pivot, angle, units="DEGREES"):
         if units == "DEGREES":
             angle = radians(angle)
@@ -317,156 +247,14 @@ class archipack_floor(Manipulable, PropertyGroup):
 
         return new_x + pivot[0], new_y + pivot[1]
 
-    @staticmethod
-    def rough_comp(val1, val2, comp: int) -> bool:
+    def add_plane(self, x, y, w, l, clip=True):
         """
-        Check if val1 and val2 roughly compare to each other
-        :param val1: first value
-        :param val2: second value
-        :param comp: How to compare them, defined using constants at top of file like EQUAL, LESS_EQUAL, etc.
-        :return: Whether or not the values roughly compare to each other as specified by comp
-        """
-
-        # if allows equality
-        if comp in (EQUAL, LESS_EQUAL, GREATER_EQUAL) and isclose(val1, val2, abs_tol=SLOP):
-            return True
-        elif comp == NOT_EQUAL and not isclose(val1, val2, abs_tol=SLOP):
-            return True
-
-        # check inequalities with equality
-        upper, lower = val2 - SLOP, val2 + SLOP  # allow a spread of values for the regular inequalities
-
-        if comp == LESS_EQUAL and val1 < val2:
-            return True
-        elif comp == GREATER_EQUAL and val1 > val2:
-            return True
-
-        # check inequalities
-        elif comp == LESS and (val1 < upper or val1 < lower):
-            return True
-        elif comp == GREATER and (val1 > upper or val1 > lower):
-            return True
-
-        return False
-
-    @staticmethod
-    def sort_corner_points(points, center):
-        """
-        Sort corner points so they are in a counter-clockwise order, do this by using the center and the angle
-        between each point and the center. Then sort those angles from least to greatest and get the point associated
-        with that angle. Since the shape is convex, no two points will have the same angle.
-        :param points: The corner points to be sorted
-        :param center: the center of the shape
-        :return: the corner points sorted in a counter-clockwise order
-        """
-
-        # find angles
-        unsorted = []
-        for pt in points:
-            if pt[0] - center[0] != 0:
-                ang = atan((pt[1] - center[1]) / (pt[0] - center[0]))
-            else:
-                ang = radians(90)
-
-            if pt[0] < center[0] or (pt[0] <= center[0] and pt[1] < center[1]):
-                ang += radians(180)
-            elif pt[1] < center[1]:
-                ang += radians(360)
-
-            unsorted.append([ang, pt])
-
-        # sort angles
-        sorted_ = []
-        for pt in unsorted:
-            i = 0
-            for pos in range(len(sorted_)):
-                if pt[0] > sorted_[pos][0]:
-                    i = pos + 1  # we are bigger than this one, so we need to go in next position
-            sorted_.insert(i, pt)
-
-        return [i[1] for i in sorted_]
-
-    def add_board_from_boundaries(self, shape, th, mat_id=0):
-        """
-        Add a board from boundary segments using the intersection of the segments as the corner points as long
-        as they are within the specified shape, which is denoted by listing its boundary segments.
-        :param shape: The boundary segments of the board itself, used to check if a point is in the board or not
-        :param th: The thickness of the board
-        :param mat_id: The material id to use for the board        
-        """
-
-        # shape center
-        center = mathutils.Vector((0, 0))
-        for seg in shape:
-            center += mathutils.Vector(seg[0])
-            center += mathutils.Vector(seg[1])
-        center = tuple(center / (2 * len(shape))) if len(shape) != 0 else (0, 0)
-
-        outer_boundaries = [((0, 0), (0, self.length)), ((0, 0), (self.width, 0)),
-                            ((self.width, 0), (self.width, self.length)),
-                            ((self.width, self.length), (0, self.length))]
-
-        corners = self.corner_points_from_boundaries(outer_boundaries + shape, shape, center)  # find the corner points
-
-        if len(corners) < 3:  # there needs to be at least three corners
-            return
-
-        # corners center - use to sort points because sometimes center from above is outside shape and it won't sort
-        points_center = [0, 0]
-        for i in corners:
-            points_center[0] += i[0]
-            points_center[1] += i[1]
-        points_center = [i / len(corners) for i in points_center]
-
-        # sort corner points
-        points = archipack_floor.sort_corner_points(corners, points_center)
-
-        p = len(self.vs)
-        f = len(self.fs)
-        # add vertices
-        for pt in points:
-            self.vs.append((pt[0], pt[1], 0))
-            self.vs.append((pt[0], pt[1], th))
-
-        # add faces
-        start_p = p
-        faces, top_face, bottom_face = [], [], []
-
-        for i in range(len(points) - 1):  # most of the edge faces
-            faces.append([p, p + 2, p + 3, p + 1])
-            top_face.append(p)
-            bottom_face.append(p + 1)
-            p += 2
-
-        # add last two vertices
-        top_face.append(p)
-        bottom_face.append(p + 1)
-        self.append_all(self.fs, faces)
-
-        self.fs.append((p, start_p, start_p + 1, p + 1))  # final side face
-        top_face.reverse()  # reverse to get normals right
-        self.fs.append(top_face)
-        self.fs.append(bottom_face)
-
-        for i in range(len(self.fs) - f):  # at material ids
-            self.ms.append(mat_id)
-
-        # uv unwrap
-        faces.append(top_face)
-        faces.append(bottom_face)
-        self.uv_unwrap(faces, points_center + [0])
-
-    def add_cube(self, x, y, z, w, l, t, clip=True, mat_id=0):
-        """
-        Adds vertices, faces, and material ids for a cube, makes it easy since this shape is added so much
+        Adds vertices, faces, and material ids for a plane, makes it easy since this shape is added so much
         :param x: start x position
         :param y: start y position
-        :param z: start z position
         :param w: width (in x direction)
         :param l: length (in y direction)
-        :param t: thickness (in z direction)
-        :param clip: trim back mesh to be within length and width
-        :param mat_id: material id to use for the six faces        
+        :param clip: trim back plane to be within length and width  
         """
         # if starting point is greater than bounds, don't even bother
         if clip and (x >= self.width or y >= self.length):
@@ -477,47 +265,14 @@ class archipack_floor(Manipulable, PropertyGroup):
         if clip and y + l > self.length:
             l = self.length - y
 
-        self.append_all(self.vs, [(x, y, z), (x, y, z + t), (x + w, y, z), (x + w, y, z + t), (x, y + l, z),
-                                  (x, y + l, z + t), (x + w, y + l, z), (x + w, y + l, z + t)])
-        self.add_cube_faces([x + w / 2, y + l / 2, z])
-        self.add_cube_mat_ids(mat_id)
-
-    def add_cube_faces(self, board_center):
-        p = len(self.vs) - 8
-        faces = [(p, p + 2, p + 3, p + 1), (p + 2, p + 6, p + 7, p + 3), (p + 1, p + 3, p + 7, p + 5),
-                 (p + 6, p + 4, p + 5, p + 7), (p, p + 1, p + 5, p + 4), (p, p + 4, p + 6, p + 2)]
-        self.append_all(self.fs, faces)
-
-        self.uv_unwrap(faces, board_center)
-
-    def add_cube_mat_ids(self, mat_id=0):
-        self.append_all(self.ms, [mat_id]*6)
+        p = len(self.vs)
+        self.append_all(self.vs, [(x, y, 0), (x + w, y, 0), (x + w, y + l, 0), (x, y + l, 0)])
+        self.fs.append([p + 3, p + 2, p + 1, p])
 
     def add_manipulator(self, name, pt1, pt2, pt3):
         m = self.manipulators.add()
         m.prop1_name = name
         m.set_pts([pt1, pt2, pt3])
-
-    def corner_points_from_boundaries(self, segments, shape, center) -> list:
-        """
-        Take segments and intersect them to find corner points of object. Make sure all points are within outer
-        boundaries, and the shape
-        :param segments: The segments that form that boundaries, [[start_v, end_v], [start_v2, end_v2]...]
-        :param shape: The segments that make up the shape, [[start_v, end_v], [start_v2, end_v2]...]
-        :param center: The center of shape
-        :return: The points that form the corners of the object [corner_v, corner_v2...]
-        """
-        out = []
-
-        # for every segment, intersect it with every other segment
-        for i in range(0, len(segments) - 1):
-            for j in range(i + 1, len(segments)):
-                point = self.point_of_intersection(segments[i][0], segments[i][1], segments[j][0], segments[j][1])
-
-                if point is not None:
-                    if point not in out and self.point_in_shape(point, shape, center):
-                        out.append(point)
-        return out
 
     def get_thickness(self):
         if self.vary_thickness:
@@ -526,36 +281,6 @@ class archipack_floor(Manipulable, PropertyGroup):
             return uniform(self.thickness - v, self.thickness + v)
         else:
             return self.thickness
-
-    def point_in_shape(self, point, shape, center) -> bool:
-        """
-        Find if the point is in the shape, do this by finding the center of the shape, and then go through each segment
-        and make sure the point is on the same side of the line as the center, if it is, then it is inside the shape
-        :param point: An (x, y) tuple with the point to check
-        :param shape: The line segments that make up the shape, [[start_v, end_v], [start_v2, end_v2]...]
-        :param center: the center of shape
-        :return: Whether or not the point is in the shape
-        """
-        # not in outer boundaries - use NOT and self.rough_comp to allow a little bit of wiggle room at boundaries
-        if not (self.rough_comp(point[0], 0, GREATER_EQUAL)
-                and self.rough_comp(point[0], self.width, LESS_EQUAL)
-                and self.rough_comp(point[1], 0, GREATER_EQUAL)
-                and self.rough_comp(point[1], self.length, LESS_EQUAL)):
-            return False
-
-        # go through each line segment and make sure point is on the same side as the center
-        for seg in shape:
-            if not archipack_floor.points_on_same_side_of_line_segment(center, point, seg):  # not in board
-                return False
-
-        return True
-
-    def tile_grout(self):
-        z = self.thickness - self.mortar_depth
-        x = self.width
-        y = self.length
-
-        self.add_cube(0, 0, 0, x, y, z, mat_id=1)
 
     def tile_regular(self):
         """
@@ -587,7 +312,7 @@ class archipack_floor(Manipulable, PropertyGroup):
                     v = self.tile_width * self.offset_variance * 0.0049
                     tw2 = uniform((self.tile_width / 2) - v, (self.tile_width / 2) + v)
 
-                self.add_cube(cur_x, cur_y, 0, tw2, tl2, self.get_thickness())
+                self.add_plane(cur_x, cur_y, tw2, tl2)
                 cur_x += tw2 + self.spacing
 
             cur_y += tl2 + self.spacing
@@ -624,11 +349,11 @@ class archipack_floor(Manipulable, PropertyGroup):
                 if row == 0 or row == 1:
                     # adjust for if there is a need to cut off the bottom of the tile
                     if cur_y < 0:
-                        self.add_cube(cur_x, 0, 0, tw, tl + cur_y, self.get_thickness())  # large one
+                        self.add_plane(cur_x, 0, tw, tl + cur_y)  # large one
                     else:
-                        self.add_cube(cur_x, cur_y, 0, tw, tl, self.get_thickness())  # large one
+                        self.add_plane(cur_x, cur_y, tw, tl)  # large one
 
-                    self.add_cube(cur_x + tw + sp, cur_y + s_tl + sp, 0, s_tw, s_tl, self.get_thickness())  # small one
+                    self.add_plane(cur_x + tw + sp, cur_y + s_tl + sp, s_tw, s_tl)  # small one
 
                     if step_back:
                         cur_x += tw + sp
@@ -640,16 +365,16 @@ class archipack_floor(Manipulable, PropertyGroup):
                     step_back = not step_back
                 else:
                     if cur_x == 0:  # half width for starting position
-                        self.add_cube(cur_x, cur_y, 0, s_tw, tl, self.get_thickness())  # large one
+                        self.add_plane(cur_x, cur_y, s_tw, tl)  # large one
                         # small one on right
-                        self.add_cube(cur_x + s_tw + sp, cur_y + s_tl + sp, 0, s_tw, s_tl, self.get_thickness())
+                        self.add_plane(cur_x + s_tw + sp, cur_y + s_tl + sp, s_tw, s_tl)
                         # small one on bottom
-                        self.add_cube(cur_x, cur_y - sp - s_tl, 0, s_tw, s_tl, self.get_thickness())
+                        self.add_plane(cur_x, cur_y - sp - s_tl, s_tw, s_tl)
                         cur_x += (2 * s_tw) + tw + (3 * sp)
                     else:
-                        self.add_cube(cur_x, cur_y, 0, tw, tl, self.get_thickness())  # large one
+                        self.add_plane(cur_x, cur_y, tw, tl)  # large one
                         # small one on right
-                        self.add_cube(cur_x + tw + sp, cur_y + s_tl + sp, 0, s_tw, s_tl, self.get_thickness())
+                        self.add_plane(cur_x + tw + sp, cur_y + s_tl + sp, s_tw, s_tl)
                         cur_x += (2 * tw) + (3*sp) + s_tw
 
             if row == 0 or row == 2:
@@ -683,13 +408,13 @@ class archipack_floor(Manipulable, PropertyGroup):
 
             while cur_x < self.width:
                 if row == 0:  # large one then two small ones stacked beside it
-                    self.add_cube(cur_x, cur_y, 0, tw, tl, self.get_thickness())
-                    self.add_cube(cur_x + tw + sp, cur_y, 0, s_tw, s_tl, self.get_thickness())
-                    self.add_cube(cur_x + tw + sp, cur_y + s_tl + sp, 0, s_tw, s_tl, self.get_thickness())
+                    self.add_plane(cur_x, cur_y, tw, tl)
+                    self.add_plane(cur_x + tw + sp, cur_y, s_tw, s_tl,)
+                    self.add_plane(cur_x + tw + sp, cur_y + s_tl + sp, s_tw, s_tl)
                     cur_x += tw + s_tw + (2 * sp)
                 else:  # row of small ones
-                    self.add_cube(cur_x, cur_y, 0, s_tw, s_tl, self.get_thickness())
-                    self.add_cube(cur_x + s_tw + sp, cur_y, 0, s_tw, s_tl, self.get_thickness())
+                    self.add_plane(cur_x, cur_y, s_tw, s_tl)
+                    self.add_plane(cur_x + s_tw + sp, cur_y, s_tw, s_tl)
                     cur_x += tw + sp
 
             if row == 0:
@@ -721,8 +446,10 @@ class archipack_floor(Manipulable, PropertyGroup):
                 cur_x = -sp / 2
 
             while cur_x - width / 2 < self.width:  # place tile as long as left is still within bounds
-                segments = self.line_segments_from_points([(pt[0] + cur_x, pt[1] + cur_y) for pt in base_points])
-                self.add_board_from_boundaries(segments, self.get_thickness())
+                p = len(self.vs)
+                for pt in base_points:
+                    self.vs.append((pt[0] + cur_x, pt[1] + cur_y, 0))
+                self.fs.append([p] + [i for i in range(len(self.vs) - 1, p, -1)])
 
                 cur_x += width + sp
 
@@ -749,11 +476,11 @@ class archipack_floor(Manipulable, PropertyGroup):
             cur_x = 0
 
             while cur_x < self.width:
-                self.add_cube(cur_x, cur_y, 0, tw, s_tl, self.get_thickness())  # bottom
-                self.add_cube(cur_x + tw + sp, cur_y, 0, s_tw, tl, self.get_thickness())  # right
-                self.add_cube(cur_x + s_tw + sp, cur_y + tl + sp, 0, tw, s_tl, self.get_thickness())  # top
-                self.add_cube(cur_x, cur_y + s_tl + sp, 0, s_tw, tl, self.get_thickness())  # left
-                self.add_cube(cur_x + s_tw + sp, cur_y + s_tl + sp, 0, s_tw, s_tl, self.get_thickness())  # center
+                self.add_plane(cur_x, cur_y, tw, s_tl)  # bottom
+                self.add_plane(cur_x + tw + sp, cur_y, s_tw, tl)  # right
+                self.add_plane(cur_x + s_tw + sp, cur_y + tl + sp, tw, s_tl)  # top
+                self.add_plane(cur_x, cur_y + s_tl + sp, s_tw, tl)  # left
+                self.add_plane(cur_x + s_tw + sp, cur_y + s_tl + sp, s_tw, s_tl)  # center
 
                 cur_x += tw + s_tw + (2*sp)
             cur_y += tl + s_tl + (2*sp)
@@ -786,7 +513,7 @@ class archipack_floor(Manipulable, PropertyGroup):
                 if (counter >= self.max_boards and self.vary_length) or cur_y + bl2 > self.length:
                     bl2 = self.length - cur_y
 
-                self.add_cube(cur_x, cur_y, 0, bw2, bl2, self.get_thickness())
+                self.add_plane(cur_x, cur_y, bw2, bl2)
                 cur_y += bl2 + self.length_spacing
                 counter += 1
 
@@ -815,7 +542,7 @@ class archipack_floor(Manipulable, PropertyGroup):
 
                     for i in range(self.boards_in_group):
                         if cur_x < self.width and cur_y < self.length:
-                            self.add_cube(cur_x, cur_y, 0, bw, bl, self.get_thickness())
+                            self.add_plane(cur_x, cur_y, bw, bl)
                             cur_x += bw + self.spacing
 
                     cur_x = start_x
@@ -824,7 +551,7 @@ class archipack_floor(Manipulable, PropertyGroup):
                 else:
                     for i in range(self.boards_in_group):
                         if cur_x < self.width and cur_y < self.length:
-                            self.add_cube(cur_x, cur_y, 0, bl, bw, self.get_thickness())
+                            self.add_plane(cur_x, cur_y, bl, bw)
                             cur_y += bw + self.spacing
 
                 orient_length = not orient_length
@@ -848,20 +575,24 @@ class archipack_floor(Manipulable, PropertyGroup):
 
             while cur_x < self.width:
                 # left side
-                board = self.line_segments_from_points(
-                    [(cur_x, cur_y), (cur_x + x_dif, cur_y + y_dif),
-                     (cur_x + x_dif, cur_y + total_y_dif), (cur_x, cur_y + width_dif)]
+                p = len(self.vs)
+                self.append_all(
+                    self.vs,
+                    [(cur_x, cur_y, 0), (cur_x + x_dif, cur_y + y_dif, 0),
+                     (cur_x + x_dif, cur_y + total_y_dif, 0), (cur_x, cur_y + width_dif, 0)]
                 )
-                self.add_board_from_boundaries(board, self.get_thickness())
+                self.fs.append([p + 3, p + 2, p + 1, p])
                 cur_x += x_dif + self.spacing
 
                 # right side
                 if cur_x < self.width:
-                    board = self.line_segments_from_points(
-                        [(cur_x, cur_y + y_dif), (cur_x + x_dif, cur_y),
-                         (cur_x + x_dif, cur_y + width_dif), (cur_x, cur_y + total_y_dif)]
+                    p = len(self.vs)
+                    self.append_all(
+                        self.vs,
+                        [(cur_x, cur_y + y_dif, 0), (cur_x + x_dif, cur_y, 0),
+                         (cur_x + x_dif, cur_y + width_dif, 0), (cur_x, cur_y + total_y_dif, 0)]
                     )
-                    self.add_board_from_boundaries(board, self.get_thickness())
+                    self.fs.append([p + 3, p + 2, p + 1, p])
                     cur_x += x_dif + self.spacing
 
             cur_y += width_dif + sp_dif  # adjust spacing amount for 45 degree angle
@@ -886,21 +617,25 @@ class archipack_floor(Manipulable, PropertyGroup):
 
             while cur_x - x_dif_45 < self.width:  # continue as long as top left corner is still good
                 # left side
-                board = self.line_segments_from_points(
-                    [(cur_x, cur_y), (cur_x + x_dif, cur_y + y_dif),
-                     (cur_x + x_dif - x_dif_45, cur_y + total_y_dif), (cur_x - x_dif_45, cur_y + y_dif_45)]
+                p = len(self.vs)
+                self.append_all(
+                    self.vs,
+                    [(cur_x, cur_y, 0), (cur_x + x_dif, cur_y + y_dif, 0),
+                     (cur_x + x_dif - x_dif_45, cur_y + total_y_dif, 0), (cur_x - x_dif_45, cur_y + y_dif_45, 0)]
                 )
-                self.add_board_from_boundaries(board, self.get_thickness())
+                self.fs.append([p + 3, p + 2, p + 1, p])
                 cur_x += x_dif - x_dif_45 + sp_dif
                 cur_y += y_dif - y_dif_45 - sp_dif
 
                 if cur_x < self.width:
-                    board = self.line_segments_from_points(
-                        [(cur_x, cur_y), (cur_x + x_dif, cur_y - y_dif),
-                         (cur_x + x_dif + x_dif_45, cur_y - y_dif + y_dif_45),
-                         (cur_x + x_dif_45, cur_y + y_dif_45)]
+                    p = len(self.vs)
+                    self.append_all(
+                        self.vs,
+                        [(cur_x, cur_y, 0), (cur_x + x_dif, cur_y - y_dif, 0),
+                         (cur_x + x_dif + x_dif_45, cur_y - y_dif + y_dif_45, 0),
+                         (cur_x + x_dif_45, cur_y + y_dif_45, 0)]
                     )
-                    self.add_board_from_boundaries(board, self.get_thickness())
+                    self.fs.append([p + 3, p + 2, p + 1, p])
                     cur_x += x_dif + x_dif_45 + sp_dif
                     cur_y -= y_dif - y_dif_45 - sp_dif
                 else:  # we didn't place the right board, so step ahead far enough the the while loop for x breaks
@@ -973,8 +708,6 @@ class archipack_floor(Manipulable, PropertyGroup):
                 self.wood_herringbone_parquet()
 
         elif self.floor_material == "tile":
-            self.tile_grout()  # create grout
-
             if self.tile_style == "regular":
                 self.tile_regular()
             elif self.tile_style == "hopscotch":
@@ -1048,7 +781,7 @@ class archipack_floor(Manipulable, PropertyGroup):
         context.scene.objects.active = o
 
         self.update_data()  # update vertices and faces
-        BmeshEdit.buildmesh(context, o, self.verts, self.faces, matids=self.matids, uvs=self.uvs)
+        BmeshHelper.buildmesh(context, o, self.verts, self.faces)
 
         # update manipulators
         self.update_manipulators()

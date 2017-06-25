@@ -81,22 +81,14 @@ class archipack_floor(Manipulable, PropertyGroup):
         description="Automatically update the mesh whenever a parameter is changed"
     )
 
-    # floor type
-    floor_material = EnumProperty(
-        name="Floor Material", items=(("wood", "Wood", ""), ("tile", "Tile", "")),
-        default="wood", description="Type of material the floor is made of", update=update
-    )
-    wood_style = EnumProperty(
-        name='Wood Style', items=(("regular", "Regular", ""), ("square_parquet", "Square Parquet", ""),
-                                  ("herringbone_parquet", "Herringbone Parquet", ""),
-                                  ("herringbone", "Herringbone", "")), default="regular",
-        description="Style of wood floor", update=update
-    )
-    tile_style = EnumProperty(
-        name='Tile Style', items=(("regular", "Regular", ""), ("hopscotch", "Hopscotch", ""),
-                                  ("stepping_stone", "Stepping Stone", ""), ("hexagon", "Hexagon", ""),
-                                  ("windmill", "Windmill", "")),
-        default="regular", update=update
+    # pattern
+    pattern = EnumProperty(
+        name='Floor Pattern', items=(("boards", "Boards", ""), ("square_parquet", "Square Parquet", ""),
+                                     ("herringbone_parquet", "Herringbone Parquet", ""),
+                                     ("herringbone", "Herringbone", ""), ("regular_tile", "Regular Tile", ""),
+                                     ("hopscotch", "Hopscotch", ""), ("stepping_stone", "Stepping Stone", ""),
+                                     ("hexagon", "Hexagon", ""), ("windmill", "Windmill", "")),
+        default="boards", update=update
     )
 
     # overall length and width
@@ -282,7 +274,8 @@ class archipack_floor(Manipulable, PropertyGroup):
         else:
             return self.thickness
 
-    def tile_regular(self):
+    # patterns
+    def regular_tile(self):
         """
          ____  ____  ____
         |    ||    ||    | Regular tile, rows can be offset, either manually or randomly
@@ -318,7 +311,7 @@ class archipack_floor(Manipulable, PropertyGroup):
             cur_y += tl2 + self.spacing
             off = not off
 
-    def tile_hopscotch(self):
+    def hopscotch(self):
         """
          ____  _  Large tile, plus small one on top right corner
         |    ||_|
@@ -385,7 +378,7 @@ class archipack_floor(Manipulable, PropertyGroup):
 
             row = (row + 1) % 3  # keep wrapping rows
 
-    def tile_stepping_stone(self):
+    def stepping_stone(self):
         """
          ____  __  ____
         |    ||__||    | Row of large one, then two small ones stacked beside it
@@ -424,7 +417,7 @@ class archipack_floor(Manipulable, PropertyGroup):
 
             row = (row + 1) % 2
 
-    def tile_hexagon(self):
+    def hexagon(self):
         """
           __  Hexagon tiles
         /   \
@@ -456,7 +449,7 @@ class archipack_floor(Manipulable, PropertyGroup):
             cur_y += vertical_spacing
             offset = not offset
 
-    def tile_windmill(self):
+    def windmill(self):
         """
          __  ____
         |  ||____| This also has a square one in the middle, totaling 5 tiles per pattern
@@ -485,7 +478,7 @@ class archipack_floor(Manipulable, PropertyGroup):
                 cur_x += tw + s_tw + (2*sp)
             cur_y += tl + s_tl + (2*sp)
 
-    def wood_regular(self):
+    def boards(self):
         """
         ||| Typical wood boards
         |||
@@ -519,7 +512,7 @@ class archipack_floor(Manipulable, PropertyGroup):
 
             cur_x += bw2 + self.width_spacing
 
-    def wood_square_parquet(self):
+    def square_parquet(self):
         """
         ||--||-- Alternating groups oriented either horizontally, or forwards and backwards.
         ||--||-- self.spacing is used because it is the same spacing for width and length
@@ -559,7 +552,7 @@ class archipack_floor(Manipulable, PropertyGroup):
             start_orient_length = not start_orient_length
             cur_x += bl + self.spacing
 
-    def wood_herringbone(self):
+    def herringbone(self):
         """
         Boards are at 45 degree angle, in chevron pattern, ends are angled 
         """
@@ -597,7 +590,7 @@ class archipack_floor(Manipulable, PropertyGroup):
 
             cur_y += width_dif + sp_dif  # adjust spacing amount for 45 degree angle
 
-    def wood_herringbone_parquet(self):
+    def herringbone_parquet(self):
         """
         Boards are at 45 degree angle, in chevron pattern, ends are square, not angled
         """
@@ -697,27 +690,24 @@ class archipack_floor(Manipulable, PropertyGroup):
         self.vs, self.fs, self.ms, self.us = [], [], [], []
         self.uv_factor = 1 / max(self.width, self.length)  # automatically scale to keep within reasonable bounds
 
-        if self.floor_material == "wood":
-            if self.wood_style == "regular":
-                self.wood_regular()
-            elif self.wood_style == "square_parquet":
-                self.wood_square_parquet()
-            elif self.wood_style == "herringbone":
-                self.wood_herringbone()
-            elif self.wood_style == "herringbone_parquet":
-                self.wood_herringbone_parquet()
-
-        elif self.floor_material == "tile":
-            if self.tile_style == "regular":
-                self.tile_regular()
-            elif self.tile_style == "hopscotch":
-                self.tile_hopscotch()
-            elif self.tile_style == "stepping_stone":
-                self.tile_stepping_stone()
-            elif self.tile_style == "hexagon":
-                self.tile_hexagon()
-            elif self.tile_style == "windmill":
-                self.tile_windmill()
+        if self.pattern == "boards":
+            self.boards()
+        elif self.pattern == "square_parquet":
+            self.square_parquet()
+        elif self.pattern == "herringbone":
+            self.herringbone()
+        elif self.pattern == "herringbone_parquet":
+            self.herringbone_parquet()
+        elif self.pattern == "regular_tile":
+            self.regular_tile()
+        elif self.pattern == "hopscotch":
+            self.hopscotch()
+        elif self.pattern == "stepping_stone":
+            self.stepping_stone()
+        elif self.pattern == "hexagon":
+            self.hexagon()
+        elif self.pattern == "windmill":
+            self.windmill()
 
     def update_manipulators(self):
         self.manipulators.clear()  # clear every time, add new ones
@@ -726,29 +716,27 @@ class archipack_floor(Manipulable, PropertyGroup):
 
         z = self.thickness
 
-        if self.floor_material == "wood":
-            if self.wood_style == "regular":
-                self.add_manipulator("board_length", (0, 0, z), (0, self.board_length, z), (0.1, 0, z))
-                self.add_manipulator("board_width", (0, 0, z), (self.board_width, 0, z), (-0.2, 0, z))
-            elif self.wood_style == "square_parquet":
-                self.add_manipulator("short_board_length", (0, 0, z), (0, self.short_board_length, z), (-0.2, 0, z))
-            elif self.wood_style in ("herringbone", "herringbone_parquet"):
-                dia = self.short_board_length * cos(radians(45))
-                dia2 = self.board_width * cos(radians(45))
-                self.add_manipulator("short_board_length", (0, 0, z), (dia, dia, z), (0, 0, z))
-                self.add_manipulator("board_width", (dia, 0, z), (dia - dia2, dia2, z), (0, 0, z))
-
-        elif self.floor_material == "tile":
+        if self.pattern == "boards":
+            self.add_manipulator("board_length", (0, 0, z), (0, self.board_length, z), (0.1, 0, z))
+            self.add_manipulator("board_width", (0, 0, z), (self.board_width, 0, z), (-0.2, 0, z))
+        elif self.pattern == "square_parquet":
+            self.add_manipulator("short_board_length", (0, 0, z), (0, self.short_board_length, z), (-0.2, 0, z))
+        elif self.pattern in ("herringbone", "herringbone_parquet"):
+            dia = self.short_board_length * cos(radians(45))
+            dia2 = self.board_width * cos(radians(45))
+            self.add_manipulator("short_board_length", (0, 0, z), (dia, dia, z), (0, 0, z))
+            self.add_manipulator("board_width", (dia, 0, z), (dia - dia2, dia2, z), (0, 0, z))
+        else:
             tl = self.tile_length
             tw = self.tile_width
 
-            if self.tile_style in ("regular", "hopscotch", "stepping_stone"):
+            if self.pattern in ("regular_tile", "hopscotch", "stepping_stone"):
                 self.add_manipulator("tile_width", (0, tl, z), (tw, tl, z), (0, 0, z))
                 self.add_manipulator("tile_length", (0, 0, z), (0, tl, z), (0, 0, z))
-            elif self.tile_style == "hexagon":
+            elif self.pattern == "hexagon":
                 self.add_manipulator("tile_width", (tw / 2 + self.spacing, 0, z), (tw * 1.5 + self.spacing, 0, z),
                                      (0, 0, 0))
-            elif self.tile_style == "windmill":
+            elif self.pattern == "windmill":
                 self.add_manipulator("tile_width", (0, 0, z), (tw, 0, 0), (0, 0, z))
                 self.add_manipulator("tile_length", (0, tl / 2 + self.spacing, z), (0, tl * 1.5 + self.spacing, z),
                                      (0, 0, z))
@@ -814,12 +802,7 @@ class ARCHIPACK_PT_floor(Panel):
         layout.operator("archipack.floor_manipulate")
         layout.separator()
 
-        # materials / style
-        layout.prop(props, 'floor_material')
-        if props.floor_material == "wood":
-            layout.prop(props, 'wood_style')
-        elif props.floor_material == 'tile':
-            layout.prop(props, 'tile_style')
+        layout.prop(props, 'pattern')
         layout.separator()
 
         # overall measurements
@@ -834,48 +817,43 @@ class ARCHIPACK_PT_floor(Panel):
             layout.prop(props, 'thickness_variance')
         layout.separator()
 
-        # wood
-        if props.floor_material == "wood":
-            # length
-            if props.wood_style == 'regular':
-                layout.prop(props, 'board_length')
-                layout.prop(props, 'vary_length', icon='RNDCURVE')
-                if props.vary_length:
-                    layout.prop(props, 'length_variance')
-                    layout.prop(props, 'max_boards')
-                layout.separator()
+        if props.pattern == 'regular':
+            layout.prop(props, 'board_length')
+            layout.prop(props, 'vary_length', icon='RNDCURVE')
+            if props.vary_length:
+                layout.prop(props, 'length_variance')
+                layout.prop(props, 'max_boards')
+            layout.separator()
 
-                # width
-                layout.prop(props, 'board_width')
-                # vary width
-                if props.wood_style == 'regular':
-                    layout.prop(props, 'vary_width', icon='RNDCURVE')
-                    if props.vary_width:
-                        layout.prop(props, 'width_variance')
-                    layout.separator()
+            # width
+            layout.prop(props, 'board_width')
+            # vary width
+            layout.prop(props, 'vary_width', icon='RNDCURVE')
+            if props.vary_width:
+                layout.prop(props, 'width_variance')
+            layout.separator()
 
-                layout.prop(props, 'length_spacing')
-                layout.prop(props, 'width_spacing')
-                layout.separator()
-            else:
-                layout.prop(props, 'short_board_length')
+            layout.prop(props, 'length_spacing')
+            layout.prop(props, 'width_spacing')
+            layout.separator()
+        elif props.pattern in ('square_parquet', 'herringbone_parquet', 'herringbone'):
+            layout.prop(props, 'short_board_length')
 
-                if props.wood_style != "square_parquet":
-                    layout.prop(props, "board_width")
-                layout.prop(props, "spacing")
+            if props.pattern != "square_parquet":
+                layout.prop(props, "board_width")
+            layout.prop(props, "spacing")
 
-                if props.wood_style == 'square_parquet':
-                    layout.prop(props, 'boards_in_group')
-        # tile
-        elif props.floor_material == "tile":
+            if props.pattern == 'square_parquet':
+                layout.prop(props, 'boards_in_group')
+        elif props.pattern in ('reqular_tile', 'hopscotch', 'stepping_stone', 'hexagon', 'windmill'):
             # width and length and mortar
-            if props.tile_style != "hexagon":
+            if props.pattern != "hexagon":
                 layout.prop(props, "tile_length")
             layout.prop(props, "tile_width")
             layout.prop(props, "mortar_depth")
             layout.separator()
 
-            if props.tile_style == "regular":
+            if props.pattern == "regular":
                 layout.prop(props, "random_offset", icon="RNDCURVE")
                 if props.random_offset:
                     layout.prop(props, "offset_variance")

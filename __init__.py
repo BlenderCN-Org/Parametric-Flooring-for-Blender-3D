@@ -45,7 +45,7 @@ bl_info = {
 import bpy
 from bpy.types import Operator, PropertyGroup, Mesh, Panel
 from bpy.props import FloatProperty, CollectionProperty, BoolProperty, IntProperty, EnumProperty
-import mathutils
+from mathutils import Vector
 from random import uniform
 from math import radians, cos, sin, atan, isclose
 from .bmesh_utils import BmeshEdit as BmeshHelper
@@ -638,7 +638,7 @@ class archipack_floor(Manipulable, PropertyGroup):
 
     # TODO: fix issue with bottom face not being oriented properly
     def uv_unwrap(self, faces, board_center):
-        board_center = mathutils.Vector(board_center)
+        board_center = Vector(board_center)
 
         for face in faces:
             vertices = [self.vs[i] for i in face]
@@ -651,9 +651,9 @@ class archipack_floor(Manipulable, PropertyGroup):
                     th = max(vertices[i][2], vertices[i + 1][2])
 
             if vertical_face:
-                origin = mathutils.Vector(vertices[0])
-                v1 = mathutils.Vector(vertices[1]) - origin
-                v2 = mathutils.Vector(vertices[2]) - origin
+                origin = Vector(vertices[0])
+                v1 = Vector(vertices[1]) - origin
+                v2 = Vector(vertices[2]) - origin
 
                 # normal
                 normal = v1.cross(v2)
@@ -770,6 +770,18 @@ class archipack_floor(Manipulable, PropertyGroup):
 
         self.update_data()  # update vertices and faces
         BmeshHelper.buildmesh(context, o, self.verts, self.faces)
+
+        # needs bisected?
+        bisect = self.pattern in ('hexagon', 'herringbone', 'herringbone_parquet')
+        for mod in o.modifiers:
+            if mod.type == 'BOOLEAN':
+                bisect = False
+
+        if bisect:
+            BmeshHelper.bissect(context, o, Vector((0, 0, 0)), Vector((0, -1, 0)))  # bottom
+            BmeshHelper.bissect(context, o, Vector((0, self.length, 0)), Vector((0, 1, 0)))  # top
+            BmeshHelper.bissect(context, o, Vector((0, 0, 0)), Vector((-1, 0, 0)))  # left
+            BmeshHelper.bissect(context, o, Vector((self.width, 0, 0)), Vector((1, 0, 0)))  # right
 
         # update manipulators
         self.update_manipulators()

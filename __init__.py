@@ -664,6 +664,16 @@ class archipack_floor(Manipulable, PropertyGroup):
         m.prop1_name = name
         m.set_pts([pt1, pt2, pt3])
 
+    def confirm_materials(self, obj):
+        mats = len(obj.data.materials)
+
+        if mats == 0:  # add main material
+            mat = bpy.data.materials.new(obj.name + "_floor")
+            obj.data.materials.append(mat)
+        if (mats == 0 or mats == 1) and self.add_grout:  # add grout
+            mat = bpy.data.materials.new(obj.name + "_grout")
+            obj.data.materials.append(mat)
+
     def generate_pattern(self):
         # clear data before refreshing it
         self.vs, self.fs, self.ms, self.us = [], [], [], []
@@ -748,6 +758,7 @@ class archipack_floor(Manipulable, PropertyGroup):
         context.scene.objects.active = o
 
         self.generate_pattern()  # update vertices and faces
+        self.confirm_materials(o)  # update materials
         BmeshHelper.buildmesh(context, o, self.verts, self.faces)
 
         # needs bisected?
@@ -799,12 +810,17 @@ class archipack_floor(Manipulable, PropertyGroup):
 
             bmesh.ops.bevel(bm, geom=geometry, offset=self.bevel_amount, segments=1, profile=0.5)
 
+        # add material id's before adding grout
+        for face in bm.faces:
+            face.material_index = 0
+
         # grout
         if self.add_grout:
             # add cube then adjust vertex positions
-            grout_vertices = bmesh.ops.create_cube(bm, size=1.0)
+            grout_geometry = bmesh.ops.create_cube(bm, size=1.0)
             z = self.thickness - self.mortar_depth
-            for vertex in grout_vertices['verts']:
+
+            for vertex in grout_geometry['verts']:
                 # x
                 if vertex.co.x > 0:
                     vertex.co.x = self.width
@@ -820,6 +836,10 @@ class archipack_floor(Manipulable, PropertyGroup):
                     vertex.co.z = z
                 elif vertex.co.z < 0:
                     vertex.co.z = 0
+
+                # material id for grout
+                for face in vertex.link_faces:
+                    face.material_index = 1
 
         # create seams
         self.create_uv_seams(bm)

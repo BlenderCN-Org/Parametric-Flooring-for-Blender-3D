@@ -128,7 +128,7 @@ class archipack_floor(Manipulable, PropertyGroup):
         description='Vary board thickness?'
     )
     thickness_variance = FloatProperty(
-        name='Thickness Variance', min=0, max=100,
+        name='Thickness Variance', min=0, max=100, subtype='PERCENTAGE',
         default=25, update=update, precision=2,
         description='How much board thickness can vary by'
     )
@@ -224,6 +224,15 @@ class archipack_floor(Manipulable, PropertyGroup):
         name='Random UV\'s', update=update, default=True, description='Random UV positions for the faces'
     )
 
+    # bevel
+    bevel = BoolProperty(
+        name='Bevel', update=update, default=False, description='Bevel upper faces'
+    )
+    bevel_amount = FloatProperty(
+        name='Bevel Amount', update=update, unit='LENGTH', min=0.0001, max=0.005, default=0.001,
+        description='Bevel amount', precision=2, step=0.0005
+    )
+
     @staticmethod
     def append_all(v_list, add):
         for i in add:
@@ -266,14 +275,6 @@ class archipack_floor(Manipulable, PropertyGroup):
         m = self.manipulators.add()
         m.prop1_name = name
         m.set_pts([pt1, pt2, pt3])
-
-    def get_thickness(self):
-        if self.vary_thickness:
-            off = 1 / (100 / self.thickness_variance) if self.thickness_variance != 0 else 0
-            v = off * self.thickness
-            return uniform(self.thickness - v, self.thickness + v)
-        else:
-            return self.thickness
 
     # patterns
     def regular_tile(self):
@@ -794,13 +795,31 @@ class archipack_floor(Manipulable, PropertyGroup):
         bm.faces.ensure_lookup_table()
 
         # thickness
+        faces = []
         for face in bm.faces:
             if face.verts[0].co.z > 0.9:  # the thickness above is one, allow for some rounding error
-                z = self.get_thickness()
-                for vert in face.verts:
-                    bm.verts[vert.index].co.z = z
+                # calculate thickness
+                if self.vary_thickness:
+                    off = 1 / (100 / self.thickness_variance) if self.thickness_variance != 0 else 0
+                    v = off * self.thickness
+                    z = uniform(self.thickness - v, self.thickness + v)
+                else:
+                    z = self.thickness
 
-                # bevel here if needed
+                # apply thickness to every vertex in the face
+                for vertex in face.verts:
+                    bm.verts[vertex.index].co.z = z
+
+                faces.append(face)
+
+        # bevel if needed
+        if self.bevel:
+            geometry = []
+            for face in faces:
+                self.append_all(geometry, face.edges)
+                self.append_all(geometry, face.verts)
+
+            bmesh.ops.bevel(bm, geom=geometry, offset=self.bevel_amount, segments=1, profile=0.5)
 
         bm.to_mesh(o.data)
         bm.free()
@@ -851,7 +870,7 @@ class ARCHIPACK_PT_floor(Panel):
             layout.prop(props, 'thickness_variance')
         layout.separator()
 
-        if props.pattern == 'regular':
+        if props.pattern == 'boards':
             layout.prop(props, 'board_length')
             layout.prop(props, 'vary_length', icon='RNDCURVE')
             if props.vary_length:
@@ -893,6 +912,14 @@ class ARCHIPACK_PT_floor(Panel):
                     layout.prop(props, "offset_variance")
                 else:
                     layout.prop(props, "offset")
+
+        # bevel
+        layout.separator()
+        layout.prop(props, 'bevel', icon='MOD_BEVEL')
+        if props.bevel:
+            layout.prop(props, 'bevel_amount')
+
+        # uv
 
         # updating
         layout.separator()

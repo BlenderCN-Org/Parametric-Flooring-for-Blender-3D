@@ -199,9 +199,14 @@ class archipack_floor(Manipulable, PropertyGroup):
         name='Tile Length', min=2*INCH, soft_max=2*FOOT, default=8*INCH,
         update=update, precision=2, description='Length of the tiles', unit='LENGTH',
     )
+
+    # grout
+    add_grout = BoolProperty(
+        name='Add Grout', default=False, description='Add grout', update=update
+    )
     mortar_depth = FloatProperty(
         name='Mortar Depth', min=0, soft_max=1*INCH, default=0.25*INCH,
-        update=update, precision=2, unit='LENGTH',
+        update=update, precision=2, unit='LENGTH', step=0.005,
         description='The depth of the mortar from the surface of the tile'
     )
 
@@ -249,34 +254,10 @@ class archipack_floor(Manipulable, PropertyGroup):
 
         return new_x + pivot[0], new_y + pivot[1]
 
-    def add_plane(self, x, y, w, l, clip=True):
-        """
-        Adds vertices, faces, and material ids for a plane, makes it easy since this shape is added so much
-        :param x: start x position
-        :param y: start y position
-        :param w: width (in x direction)
-        :param l: length (in y direction)
-        :param clip: trim back plane to be within length and width  
-        """
-        # if starting point is greater than bounds, don't even bother
-        if clip and (x >= self.width or y >= self.length):
-            return
+    # ---------------------------------------------------
+    # Patterns
+    # ---------------------------------------------------
 
-        if clip and x + w > self.width:
-            w = self.width - x
-        if clip and y + l > self.length:
-            l = self.length - y
-
-        p = len(self.vs)
-        self.append_all(self.vs, [(x, y, 0), (x + w, y, 0), (x + w, y + l, 0), (x, y + l, 0)])
-        self.fs.append([p + 3, p + 2, p + 1, p])
-
-    def add_manipulator(self, name, pt1, pt2, pt3):
-        m = self.manipulators.add()
-        m.prop1_name = name
-        m.set_pts([pt1, pt2, pt3])
-
-    # patterns
     def regular_tile(self):
         """
          ____  ____  ____
@@ -638,7 +619,94 @@ class archipack_floor(Manipulable, PropertyGroup):
 
             cur_y = pre_y + width_dif + (2*sp_dif)
 
+    # --------------------------------------------------
+    # Non-pattern functions
+    # --------------------------------------------------
+
+    def add_plane(self, x, y, w, l, clip=True):
+        """
+        Adds vertices and faces for a place, clip to outer boundaries if clip is True
+        :param x: start x position
+        :param y: start y position
+        :param w: width (in x direction)
+        :param l: length (in y direction)
+        :param clip: trim back plane to be within length and width  
+        """
+        # if starting point is greater than bounds, don't even bother
+        if clip and (x >= self.width or y >= self.length):
+            return
+
+        if clip and x + w > self.width:
+            w = self.width - x
+        if clip and y + l > self.length:
+            l = self.length - y
+
+        p = len(self.vs)
+        self.append_all(self.vs, [(x, y, 0), (x + w, y, 0), (x + w, y + l, 0), (x, y + l, 0)])
+        self.fs.append([p + 3, p + 2, p + 1, p])
+
+    def add_manipulator(self, name, pt1, pt2, pt3):
+        m = self.manipulators.add()
+        m.prop1_name = name
+        m.set_pts([pt1, pt2, pt3])
+
+    def generate_pattern(self):
+        # clear data before refreshing it
+        self.vs, self.fs, self.ms, self.us = [], [], [], []
+        self.uv_factor = 1 / max(self.width, self.length)  # automatically scale to keep within reasonable bounds
+
+        if self.pattern == "boards":
+            self.boards()
+        elif self.pattern == "square_parquet":
+            self.square_parquet()
+        elif self.pattern == "herringbone":
+            self.herringbone()
+        elif self.pattern == "herringbone_parquet":
+            self.herringbone_parquet()
+        elif self.pattern == "regular_tile":
+            self.regular_tile()
+        elif self.pattern == "hopscotch":
+            self.hopscotch()
+        elif self.pattern == "stepping_stone":
+            self.stepping_stone()
+        elif self.pattern == "hexagon":
+            self.hexagon()
+        elif self.pattern == "windmill":
+            self.windmill()
+
     # TODO: fix issue with bottom face not being oriented properly
+    def update_manipulators(self):
+        self.manipulators.clear()  # clear every time, add new ones
+        self.add_manipulator("length", (0, 0, 0), (0, self.length, 0), (-0.4, 0, 0))
+        self.add_manipulator("width", (0, 0, 0), (self.width, 0, 0), (0.4, 0, 0))
+
+        z = self.thickness
+
+        if self.pattern == "boards":
+            self.add_manipulator("board_length", (0, 0, z), (0, self.board_length, z), (0.1, 0, z))
+            self.add_manipulator("board_width", (0, 0, z), (self.board_width, 0, z), (-0.2, 0, z))
+        elif self.pattern == "square_parquet":
+            self.add_manipulator("short_board_length", (0, 0, z), (0, self.short_board_length, z), (-0.2, 0, z))
+        elif self.pattern in ("herringbone", "herringbone_parquet"):
+            dia = self.short_board_length * cos(radians(45))
+            dia2 = self.board_width * cos(radians(45))
+            self.add_manipulator("short_board_length", (0, 0, z), (dia, dia, z), (0, 0, z))
+            self.add_manipulator("board_width", (dia, 0, z), (dia - dia2, dia2, z), (0, 0, z))
+        else:
+            tl = self.tile_length
+            tw = self.tile_width
+
+            if self.pattern in ("regular_tile", "hopscotch", "stepping_stone"):
+                self.add_manipulator("tile_width", (0, tl, z), (tw, tl, z), (0, 0, z))
+                self.add_manipulator("tile_length", (0, 0, z), (0, tl, z), (0, 0, z))
+            elif self.pattern == "hexagon":
+                self.add_manipulator("tile_width", (tw / 2 + self.spacing, 0, z), (tw * 1.5 + self.spacing, 0, z),
+                                     (0, 0, 0))
+            elif self.pattern == "windmill":
+                self.add_manipulator("tile_width", (0, 0, z), (tw, 0, 0), (0, 0, z))
+                self.add_manipulator("tile_length", (0, tl / 2 + self.spacing, z), (0, tl * 1.5 + self.spacing, z),
+                                     (0, 0, z))
+
     def uv_unwrap(self, faces, board_center):
         board_center = Vector(board_center)
 
@@ -687,62 +755,6 @@ class archipack_floor(Manipulable, PropertyGroup):
             else:
                 self.us.append([(vertex[0] * self.uv_factor, vertex[1] * self.uv_factor) for vertex in vertices])
 
-    def update_data(self):
-        # clear data before refreshing it
-        self.vs, self.fs, self.ms, self.us = [], [], [], []
-        self.uv_factor = 1 / max(self.width, self.length)  # automatically scale to keep within reasonable bounds
-
-        if self.pattern == "boards":
-            self.boards()
-        elif self.pattern == "square_parquet":
-            self.square_parquet()
-        elif self.pattern == "herringbone":
-            self.herringbone()
-        elif self.pattern == "herringbone_parquet":
-            self.herringbone_parquet()
-        elif self.pattern == "regular_tile":
-            self.regular_tile()
-        elif self.pattern == "hopscotch":
-            self.hopscotch()
-        elif self.pattern == "stepping_stone":
-            self.stepping_stone()
-        elif self.pattern == "hexagon":
-            self.hexagon()
-        elif self.pattern == "windmill":
-            self.windmill()
-
-    def update_manipulators(self):
-        self.manipulators.clear()  # clear every time, add new ones
-        self.add_manipulator("length", (0, 0, 0), (0, self.length, 0), (-0.4, 0, 0))
-        self.add_manipulator("width", (0, 0, 0), (self.width, 0, 0), (0.4, 0, 0))
-
-        z = self.thickness
-
-        if self.pattern == "boards":
-            self.add_manipulator("board_length", (0, 0, z), (0, self.board_length, z), (0.1, 0, z))
-            self.add_manipulator("board_width", (0, 0, z), (self.board_width, 0, z), (-0.2, 0, z))
-        elif self.pattern == "square_parquet":
-            self.add_manipulator("short_board_length", (0, 0, z), (0, self.short_board_length, z), (-0.2, 0, z))
-        elif self.pattern in ("herringbone", "herringbone_parquet"):
-            dia = self.short_board_length * cos(radians(45))
-            dia2 = self.board_width * cos(radians(45))
-            self.add_manipulator("short_board_length", (0, 0, z), (dia, dia, z), (0, 0, z))
-            self.add_manipulator("board_width", (dia, 0, z), (dia - dia2, dia2, z), (0, 0, z))
-        else:
-            tl = self.tile_length
-            tw = self.tile_width
-
-            if self.pattern in ("regular_tile", "hopscotch", "stepping_stone"):
-                self.add_manipulator("tile_width", (0, tl, z), (tw, tl, z), (0, 0, z))
-                self.add_manipulator("tile_length", (0, 0, z), (0, tl, z), (0, 0, z))
-            elif self.pattern == "hexagon":
-                self.add_manipulator("tile_width", (tw / 2 + self.spacing, 0, z), (tw * 1.5 + self.spacing, 0, z),
-                                     (0, 0, 0))
-            elif self.pattern == "windmill":
-                self.add_manipulator("tile_width", (0, 0, z), (tw, 0, 0), (0, 0, z))
-                self.add_manipulator("tile_length", (0, tl / 2 + self.spacing, z), (0, tl * 1.5 + self.spacing, z),
-                                     (0, 0, z))
-
     @property
     def verts(self):
         return self.vs
@@ -770,7 +782,7 @@ class archipack_floor(Manipulable, PropertyGroup):
         o.select = True
         context.scene.objects.active = o
 
-        self.update_data()  # update vertices and faces
+        self.generate_pattern()  # update vertices and faces
         BmeshHelper.buildmesh(context, o, self.verts, self.faces)
 
         # needs bisected?
@@ -785,6 +797,7 @@ class archipack_floor(Manipulable, PropertyGroup):
             BmeshHelper.bissect(context, o, Vector((0, 0, 0)), Vector((-1, 0, 0)))  # left
             BmeshHelper.bissect(context, o, Vector((self.width, 0, 0)), Vector((1, 0, 0)))  # right
 
+        # create bmesh to edit
         bm = bmesh.new()
         bm.from_mesh(o.data)
         bm.verts.ensure_lookup_table()
@@ -821,6 +834,29 @@ class archipack_floor(Manipulable, PropertyGroup):
 
             bmesh.ops.bevel(bm, geom=geometry, offset=self.bevel_amount, segments=1, profile=0.5)
 
+        # grout
+        if self.add_grout:
+            # add cube then adjust vertex positions
+            grout_vertices = bmesh.ops.create_cube(bm, size=1.0)
+            z = self.thickness - self.mortar_depth
+            for vertex in grout_vertices['verts']:
+                # x
+                if vertex.co.x > 0:
+                    vertex.co.x = self.width
+                elif vertex.co.x < 0:
+                    vertex.co.x = 0
+                # y
+                if vertex.co.y > 0:
+                    vertex.co.y = self.length
+                elif vertex.co.y < 0:
+                    vertex.co.y = 0
+                # z
+                if vertex.co.z > 0:
+                    vertex.co.z = z
+                elif vertex.co.z < 0:
+                    vertex.co.z = 0
+
+        # free bmesh
         bm.to_mesh(o.data)
         bm.free()
 
@@ -912,6 +948,12 @@ class ARCHIPACK_PT_floor(Panel):
                     layout.prop(props, "offset_variance")
                 else:
                     layout.prop(props, "offset")
+
+        # grout
+        layout.separator()
+        layout.prop(props, 'add_grout', icon='MESH_GRID')
+        if props.add_grout:
+            layout.prop(props, 'mortar_depth')
 
         # bevel
         layout.separator()

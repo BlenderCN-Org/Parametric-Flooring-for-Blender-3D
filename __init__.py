@@ -244,6 +244,20 @@ class archipack_floor(Manipulable, PropertyGroup):
             v_list.append(i)
 
     @staticmethod
+    def create_uv_seams(bm):
+        handled = set()
+        for edge in bm.edges:
+            if edge.verts[0].co.z == 0 and edge.verts[1].co.z == 0:  # bottom
+                # make sure both vertices on the edge haven't been handled, this forces one edge to not be made a seam
+                # leaving the bottom face still attached
+                if not (edge.verts[0].index in handled and edge.verts[1].index in handled):
+                    edge.seam = True
+                    handled.add(edge.verts[0].index)
+                    handled.add(edge.verts[1].index)
+            elif edge.verts[0].co.z != edge.verts[1].co.z:  # not horizontal, so they are vertical seams
+                edge.seam = True
+
+    @staticmethod
     def rotate_point(point, pivot, angle, units="DEGREES"):
         if units == "DEGREES":
             angle = radians(angle)
@@ -674,7 +688,6 @@ class archipack_floor(Manipulable, PropertyGroup):
         elif self.pattern == "windmill":
             self.windmill()
 
-    # TODO: fix issue with bottom face not being oriented properly
     def update_manipulators(self):
         self.manipulators.clear()  # clear every time, add new ones
         self.add_manipulator("length", (0, 0, 0), (0, self.length, 0), (-0.4, 0, 0))
@@ -706,54 +719,6 @@ class archipack_floor(Manipulable, PropertyGroup):
                 self.add_manipulator("tile_width", (0, 0, z), (tw, 0, 0), (0, 0, z))
                 self.add_manipulator("tile_length", (0, tl / 2 + self.spacing, z), (0, tl * 1.5 + self.spacing, z),
                                      (0, 0, z))
-
-    def uv_unwrap(self, faces, board_center):
-        board_center = Vector(board_center)
-
-        for face in faces:
-            vertices = [self.vs[i] for i in face]
-
-            vertical_face = False
-            th = 0
-            for i in range(len(vertices) - 1):
-                if vertices[i][2] - vertices[i + 1][2] != 0:  # they have different z values so face is vertical
-                    vertical_face = True
-                    th = max(vertices[i][2], vertices[i + 1][2])
-
-            if vertical_face:
-                origin = Vector(vertices[0])
-                v1 = Vector(vertices[1]) - origin
-                v2 = Vector(vertices[2]) - origin
-
-                # normal
-                normal = v1.cross(v2)
-                if (normal + origin - board_center).length < (-normal + origin - board_center).length:
-                    normal.negate()
-                normal.resize_2d()
-
-                # get angle between normal and x-axis
-                if normal[0] != 0:
-                    theta = atan(normal[1] / normal[0])
-                else:
-                    theta = radians(90)
-
-                if normal[0] < 0 or (normal[0] <= 0 and normal[1] < 0):
-                    theta += radians(180)
-                elif normal[1] < 0:
-                    theta += radians(360)
-
-                # find x and y dif values to "fold out" bottom vertices
-                x_dif, y_dif = th * cos(theta), th * sin(theta)
-                face_uvs = []
-
-                for vertex in vertices:
-                    if vertex[2] == 0:
-                        face_uvs.append(((vertex[0] + x_dif) * self.uv_factor, (vertex[1] + y_dif) * self.uv_factor))
-                    else:
-                        face_uvs.append((vertex[0] * self.uv_factor, vertex[1] * self.uv_factor))
-                self.us.append(face_uvs)
-            else:
-                self.us.append([(vertex[0] * self.uv_factor, vertex[1] * self.uv_factor) for vertex in vertices])
 
     @property
     def verts(self):
@@ -856,9 +821,23 @@ class archipack_floor(Manipulable, PropertyGroup):
                 elif vertex.co.z < 0:
                     vertex.co.z = 0
 
+        # create seams
+        self.create_uv_seams(bm)
+
         # free bmesh
         bm.to_mesh(o.data)
         bm.free()
+
+        # unwrap since mesh has now been updated
+        if context.mode != "EDIT_MESH":
+            bpy.ops.object.editmode_toggle()
+
+        bpy.ops.mesh.select_all(action='SELECT')
+        bpy.ops.uv.unwrap()
+        bpy.ops.mesh.select_all(action='DESELECT')
+
+        if context.mode == "EDIT_MESH":
+            bpy.ops.object.editmode_toggle()
 
         # update manipulators
         self.update_manipulators()

@@ -673,6 +673,8 @@ class archipack_floor(Manipulable, PropertyGroup):
         if (mats == 0 or mats == 1) and self.add_grout:  # add grout
             mat = bpy.data.materials.new(obj.name + "_grout")
             obj.data.materials.append(mat)
+        if mats == 2 and not self.add_grout:  # remove grout
+            obj.data.materials.pop(1, update_data=True)
 
     def generate_pattern(self):
         # clear data before refreshing it
@@ -933,7 +935,7 @@ class ARCHIPACK_PT_floor(Panel):
 
             if props.pattern == 'square_parquet':
                 layout.prop(props, 'boards_in_group')
-        elif props.pattern in ('reqular_tile', 'hopscotch', 'stepping_stone', 'hexagon', 'windmill'):
+        elif props.pattern in ('regular_tile', 'hopscotch', 'stepping_stone', 'hexagon', 'windmill'):
             # width and length and mortar
             if props.pattern != "hexagon":
                 layout.prop(props, "tile_length")

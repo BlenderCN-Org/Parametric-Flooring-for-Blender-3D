@@ -1,8 +1,18 @@
-# BlenderParametricObject
-Parametric Object sample for Blender 2.78+
+# Parametric Flooring for Blender 3D
 
-Strong basis for parametric object dev under blender
+Built on the framework provided by `s-leger`.
+Provides parametric flooring for Blender 3D that
+can be used during architectural visulization, or
+just in regular modeling applications. 
 
-- Support linked objects (ALT+D)
-- Support for copy parameter to selection
-- Clean mesh create/update
+There are nine different patterns included:
+
+- Boards
+- Parquet
+- Herringbone Parquet
+- Herringbone
+- Regular Tile
+- Hopscotch
+- Stepping Stone
+- Hexagon
+- Windmill

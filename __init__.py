@@ -34,9 +34,9 @@ bl_info = {
     'blender': (2, 7, 8),
     'location': 'View3D > Tools > Sample',
     'warning': '',
-    'wiki_url': 'https://github.com/BlendingJake/BlenderFlooringParametricObject/wiki',
-    'tracker_url': 'https://github.com/BlendingJake/BlenderFlooringParametricObject/issues',
-    'link': 'https://github.com/BlendingJake/BlenderFlooringParametricObject',
+    'wiki_url': 'https://github.com/BlendingJake/Parametric-Flooring-for-Blender-3D/wiki',
+    'tracker_url': 'https://github.com/BlendingJake/Parametric-Flooring-for-Blender-3D/issues',
+    'link': 'hhttps://github.com/BlendingJake/Parametric-Flooring-for-Blender-3D',
     'support': 'COMMUNITY',
     'category': '3D View'
     }
